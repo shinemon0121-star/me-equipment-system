@@ -180,7 +180,9 @@ a{color:var(--primary);text-decoration:none}
   .content{padding:16px}
   .area-grid{grid-template-columns:repeat(2,1fr);gap:10px}
   .area-card{padding:14px}
-  .barcode-input-wrap{flex-direction:column}
+  .barcode-input-wrap{flex-direction:row;flex-wrap:wrap}
+  .barcode-input-wrap .barcode-input{width:100%;flex:1 1 100%}
+  .barcode-input-wrap .btn{flex:1 1 auto;min-width:0}
   .stats-grid{grid-template-columns:repeat(2,1fr)}
   .detail-grid{grid-template-columns:1fr}
   .eq-table{font-size:12px}
@@ -319,10 +321,21 @@ a{color:var(--primary);text-decoration:none}
             &#127919; 貸出先: <span id="selectedAreaName">未選択</span>
           </div>
         </div>
+        <!-- 連続モード切替 -->
+        <div style="margin-top:8px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;color:#fff;font-size:13px;background:rgba(255,255,255,.1);padding:6px 12px;border-radius:8px">
+            <input type="checkbox" id="continuousMode" onchange="toggleContinuousMode()" style="width:18px;height:18px;accent-color:var(--success)">
+            &#9889; 連続スキャンモード
+          </label>
+          <span id="continuousModeStatus" style="font-size:12px;color:rgba(255,255,255,.6);display:none">エリア選択後、スキャンするだけで即貸出されます</span>
+          <span id="continuousCount" style="font-size:13px;color:#4ade80;font-weight:700;display:none"></span>
+        </div>
         <div class="barcode-input-wrap" style="margin-top:12px">
           <input type="text" class="barcode-input" id="barcodeInput" placeholder="機器IDをスキャンまたは入力..." autocomplete="off" autofocus>
-          <button class="btn btn-lg" style="background:rgba(255,255,255,.2);color:#fff;border:1px solid rgba(255,255,255,.3)" onclick="processBarcode()">登録</button>
+          <button class="btn btn-lg" style="background:rgba(255,255,255,.2);color:#fff;border:1px solid rgba(255,255,255,.3)" onclick="processBarcode()">&#128228; 貸出</button>
           <button class="btn btn-lg btn-warning" onclick="processReturn()" title="返却処理">&#8617; 返却</button>
+          <button class="btn btn-lg" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3)" onclick="startQrScan('lending')" title="カメラで貸出スキャン">&#128247;</button>
+          <button class="btn btn-lg" style="background:rgba(255,200,50,.25);color:#fff;border:1px solid rgba(255,200,50,.4)" onclick="startQrScan('return')" title="カメラで返却スキャン">&#128247;&#8617;</button>
         </div>
       </div>
 
@@ -2053,7 +2066,7 @@ function queueSync(action, data) {
 
 /**
  * Sync FROM Google Sheets -> Local IndexedDB
- * Pulls all equipment data from the spreadsheet and updates local DB
+ * Pulls ALL data (equipment, staff, departments, areas, items) from spreadsheet
  */
 async function pullFromSheets() {
   if (!syncEnabled) return false;
@@ -2063,44 +2076,89 @@ async function pullFromSheets() {
     // DBが初期化されているか確認
     await ensureDB();
 
-    const result = await gasGet('getEquipment');
+    const result = await gasGet('getAll');
     if (!result.success) throw new Error(result.error || '取得失敗');
 
-    const sheetData = result.data || [];
-    if (sheetData.length === 0) {
-      updateSyncUI('connected', `Sheets接続済 (0件)`);
-      return true;
+    let totalCount = 0;
+
+    // ── 機器データ (equipment) ──
+    const eqResult = result.equipment;
+    if (eqResult && eqResult.success && eqResult.data && eqResult.data.length > 0) {
+      const sheetData = eqResult.data;
+      if (eqResult.headers) {
+        sheetExtraHeaders = eqResult.headers.filter(h => !SHEET_TO_APP_MAP[h]);
+      }
+      const tx = db.transaction('equipment', 'readwrite');
+      const store = tx.objectStore('equipment');
+      for (const item of sheetData) {
+        if (!item.id) continue;
+        const existing = await new Promise(res => {
+          const r = store.get(item.id);
+          r.onsuccess = () => res(r.result);
+          r.onerror = () => res(null);
+        });
+        const merged = existing ? { ...existing, ...item } : item;
+        store.put(merged);
+      }
+      await new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = rej; });
+      totalCount += sheetData.length;
     }
-
-    // Detect extra headers from spreadsheet
-    if (result.headers) {
-      sheetExtraHeaders = result.headers.filter(h => !SHEET_TO_APP_MAP[h]);
-    }
-
-    // Merge: Sheets data takes priority for master data
-    const tx = db.transaction('equipment', 'readwrite');
-    const store = tx.objectStore('equipment');
-
-    for (const item of sheetData) {
-      if (!item.id) continue;
-      // Preserve any extra columns from the spreadsheet
-      const existing = await new Promise(res => {
-        const r = store.get(item.id);
-        r.onsuccess = () => res(r.result);
-        r.onerror = () => res(null);
-      });
-      const merged = existing ? { ...existing, ...item } : item;
-      store.put(merged);
-    }
-
-    await new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = rej; });
-
-    // Refresh local cache
     allEquipment = await dbGetAll('equipment');
+
+    // ── スタッフデータ (staff) ──
+    const stResult = result.staff;
+    if (stResult && stResult.success && stResult.data && stResult.data.length > 0) {
+      const tx = db.transaction('staff', 'readwrite');
+      const store = tx.objectStore('staff');
+      for (const s of stResult.data) {
+        if (s.staffId) store.put(s);
+      }
+      await new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = rej; });
+      totalCount += stResult.data.length;
+    }
+
+    // ── 部署データ (departments) ──
+    const dpResult = result.departments;
+    if (dpResult && dpResult.success && dpResult.data && dpResult.data.length > 0) {
+      const tx = db.transaction('departments', 'readwrite');
+      const store = tx.objectStore('departments');
+      for (const d of dpResult.data) {
+        if (d.deptId) store.put(d);
+      }
+      await new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = rej; });
+      totalCount += dpResult.data.length;
+    }
+
+    // ── エリアデータ (areas) ──
+    const arResult = result.areas;
+    if (arResult && arResult.success && arResult.data && arResult.data.length > 0) {
+      const tx = db.transaction('areas', 'readwrite');
+      const store = tx.objectStore('areas');
+      for (const a of arResult.data) {
+        if (a.areaId) store.put(a);
+      }
+      await new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = rej; });
+      totalCount += arResult.data.length;
+    }
+    // エリアグリッド更新
+    await refreshLendingAreas();
+
+    // ── 物品データ (items) ──
+    const itResult = result.items;
+    if (itResult && itResult.success && itResult.data && itResult.data.length > 0) {
+      const tx = db.transaction('items', 'readwrite');
+      const store = tx.objectStore('items');
+      for (const it of itResult.data) {
+        if (it.itemId) store.put(it);
+      }
+      await new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = rej; });
+      totalCount += itResult.data.length;
+    }
+    allItems = await dbGetAll('items');
 
     lastSyncTime = new Date().toISOString();
     localStorage.setItem('ME_LAST_SYNC', lastSyncTime);
-    updateSyncUI('connected', `Sheets同期済 (${sheetData.length}件)`);
+    updateSyncUI('connected', `Sheets同期済 (${totalCount}件)`);
     return true;
   } catch (e) {
     console.error('Pull from Sheets failed:', e);
@@ -2604,7 +2662,8 @@ async function initApp() {
   barcodeInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      processBarcode();
+      // スキャン後に少し待って全文字が入力されてから処理
+      setTimeout(() => processBarcode(), 50);
     }
   });
 
@@ -2727,10 +2786,12 @@ function updateClock() {
 // ===================== AREA GRID =====================
 function renderAreaGrid() {
   const grid = document.getElementById('areaGrid');
-  const areas = typeof LENDING_AREAS !== 'undefined' ? LENDING_AREAS : [
-    '3階西病棟','3階東病棟','4階西病棟','4階東病棟','手術室','ER','ICU','透析室',
-    'リハビリ室','化学療法室','内視鏡室','Angio室','カテ室','中央処置室','検査室','ME室'
-  ];
+  const areas = window._dynamicAreas || [];
+
+  if (areas.length === 0) {
+    grid.innerHTML = '<p style="color:var(--gray-400);text-align:center;padding:20px;grid-column:1/-1">エリアが登録されていません。<br>サイドメニューの「エリア管理」からエリアを登録してください。</p>';
+    return;
+  }
 
   const icons = {
     '3階西病棟':'&#127970;','3階東病棟':'&#127970;','4階西病棟':'&#127970;','4階東病棟':'&#127970;',
@@ -2762,7 +2823,12 @@ function selectArea(area) {
   renderAreaGrid();
   document.getElementById('selectedAreaDisplay').style.display = 'block';
   document.getElementById('selectedAreaName').textContent = area;
-  document.getElementById('barcodeStatus').textContent = `「${area}」への貸出 - 機器IDをスキャンしてください`;
+  if (continuousMode) {
+    document.getElementById('barcodeStatus').textContent = `⚡「${area}」へ連続貸出中 — スキャンするだけで即貸出`;
+  } else {
+    document.getElementById('barcodeStatus').textContent = `「${area}」への貸出 - 機器IDをスキャンしてください`;
+  }
+  updateContinuousModeStatus();
   document.getElementById('barcodeInput').focus();
 }
 
@@ -2771,21 +2837,123 @@ function clearAreaSelection() {
   renderAreaGrid();
   document.getElementById('selectedAreaDisplay').style.display = 'none';
   document.getElementById('barcodeStatus').textContent = '貸出先を選択してからスキャンしてください';
+  updateContinuousModeStatus();
 }
 
 // ===================== BARCODE / LENDING =====================
+// 連続スキャンモード
+let continuousMode = false;
+let continuousSessionCount = 0;
+let continuousSessionItems = [];
+
+function toggleContinuousMode() {
+  continuousMode = document.getElementById('continuousMode').checked;
+  const statusEl = document.getElementById('continuousModeStatus');
+  const countEl = document.getElementById('continuousCount');
+  if (continuousMode) {
+    continuousSessionCount = 0;
+    continuousSessionItems = [];
+    statusEl.style.display = 'inline';
+    countEl.style.display = 'inline';
+    countEl.textContent = '';
+    if (selectedArea) {
+      statusEl.textContent = `「${selectedArea}」へ連続貸出中 — スキャンするだけで即貸出`;
+      statusEl.style.color = '#4ade80';
+    } else {
+      statusEl.textContent = 'エリアを選択してからスキャンしてください';
+      statusEl.style.color = '#fbbf24';
+    }
+    showToast('連続スキャンモード ON — スキャンするだけで即貸出されます', 'success');
+  } else {
+    statusEl.style.display = 'none';
+    countEl.style.display = 'none';
+    if (continuousSessionCount > 0) {
+      showToast(`連続スキャン終了 — ${continuousSessionCount}台を貸出しました`, 'success');
+    }
+    continuousSessionCount = 0;
+    continuousSessionItems = [];
+  }
+  document.getElementById('barcodeInput').focus();
+}
+
+function updateContinuousModeStatus() {
+  if (!continuousMode) return;
+  const statusEl = document.getElementById('continuousModeStatus');
+  const countEl = document.getElementById('continuousCount');
+  if (selectedArea) {
+    statusEl.textContent = `「${selectedArea}」へ連続貸出中 — スキャンするだけで即貸出`;
+    statusEl.style.color = '#4ade80';
+  } else {
+    statusEl.textContent = 'エリアを選択してからスキャンしてください';
+    statusEl.style.color = '#fbbf24';
+  }
+  if (continuousSessionCount > 0) {
+    countEl.textContent = `✓ ${continuousSessionCount}台貸出済`;
+  }
+}
+
+// 連続モードで即貸出実行（モーダルなし）
+async function executeLendingDirect(eq, area) {
+  eq.status = '貸出中';
+  eq.lending = '貸出中';
+  eq.location = area;
+  await dbPut('equipment', eq);
+
+  const logEntry = {
+    logId: generateId(),
+    timestamp: new Date().toISOString(),
+    type: '貸出',
+    equipmentId: eq.id,
+    equipmentName: eq.name,
+    destination: area
+  };
+  await dbPut('history', logEntry);
+  pushEquipmentToSheets(eq);
+  pushLendingToSheets(logEntry);
+
+  const idx = allEquipment.findIndex(e => e.id === eq.id);
+  if (idx >= 0) allEquipment[idx] = eq;
+
+  continuousSessionCount++;
+  continuousSessionItems.push({ id: eq.id, name: eq.name });
+  updateContinuousModeStatus();
+  renderAreaGrid();
+  renderRecentActivity();
+  showToast(`✓ ${eq.name} (${eq.id}) → ${area}【${continuousSessionCount}台目】`, 'success');
+  document.getElementById('barcodeInput').focus();
+}
+
+// 入力値からQRコード/バーコードの不要文字を除去してIDを抽出
+function cleanScannedId(raw) {
+  // 制御文字・不可視文字を除去
+  let cleaned = raw.replace(/[\x00-\x1f\x7f\u200b-\u200f\u2028-\u202f\ufeff]/g, '').trim();
+  // URLの場合、最後のパス部分をIDとして抽出 (例: https://example.com/eq/CE-TM032)
+  if (cleaned.includes('/')) {
+    const parts = cleaned.split('/');
+    const last = parts[parts.length - 1].replace(/[?#].*$/, '').trim();
+    if (last) cleaned = last;
+  }
+  return cleaned.toUpperCase();
+}
+
 async function processBarcode() {
   const input = document.getElementById('barcodeInput');
-  const equipmentId = input.value.trim().toUpperCase();
+  const rawValue = input.value;
+  const equipmentId = cleanScannedId(rawValue);
+
+  console.log('[Scan Debug] raw:', JSON.stringify(rawValue), '→ cleaned:', equipmentId);
 
   if (!equipmentId) {
     showToast('機器IDを入力してください', 'error');
     return;
   }
 
-  // Find equipment - try exact match first, then case-insensitive
+  // Find equipment - exact match, case-insensitive, or partial match
   let eq = allEquipment.find(e => e.id === equipmentId);
   if (!eq) eq = allEquipment.find(e => e.id.toUpperCase() === equipmentId);
+  if (!eq) eq = allEquipment.find(e => equipmentId.includes(e.id.toUpperCase()));
+
+  console.log('[Scan Debug] found eq:', eq ? eq.id : 'null', 'status:', eq?.status, 'lending:', eq?.lending);
 
   if (!eq) {
     showToast(`機器ID「${equipmentId}」が見つかりません`, 'error');
@@ -2794,9 +2962,9 @@ async function processBarcode() {
     return;
   }
 
-  // Block lending if already lent out (not returned)
+  // If already lent out → show return confirmation modal (not just error)
   if (eq.status === '貸出中' || eq.lending === '貸出中') {
-    showToast(`${eq.name} (${eq.id}) は現在「${eq.location||'不明'}」に貸出中です。先に返却してください。`, 'error');
+    showReturnConfirmModal(eq);
     input.value = '';
     input.focus();
     return;
@@ -2819,21 +2987,65 @@ async function processBarcode() {
     return;
   }
 
-  // Confirm lending
+  // 連続スキャンモード: モーダルなしで即貸出
+  if (continuousMode) {
+    await executeLendingDirect(eq, selectedArea);
+    input.value = '';
+    input.focus();
+    return;
+  }
+
+  // 通常モード: 確認モーダル表示
   showLendingConfirmModal(eq, selectedArea);
   input.value = '';
 }
 
+// 貸出中の機器をスキャンした時の返却確認モーダル
+function showReturnConfirmModal(eq) {
+  document.getElementById('modalTitle').textContent = '返却確認';
+  document.getElementById('modalBody').innerHTML = `
+    <div style="background:#fef3c7;color:#92400e;padding:14px;border-radius:10px;margin-bottom:16px;text-align:center;font-weight:600">
+      &#9888; この機器は現在貸出中です
+    </div>
+    <div class="detail-grid">
+      <div class="detail-item"><div class="label">機器ID</div><div class="value" style="color:var(--primary);font-weight:700">${eq.id}</div></div>
+      <div class="detail-item"><div class="label">機器名</div><div class="value">${eq.name || '-'}</div></div>
+      <div class="detail-item"><div class="label">型式</div><div class="value">${eq.model || '-'}</div></div>
+      <div class="detail-item"><div class="label">製造番号</div><div class="value">${eq.serial || '-'}</div></div>
+      <div class="detail-item"><div class="label">機器区分</div><div class="value">${eq.category || '-'}</div></div>
+      <div class="detail-item"><div class="label">ステータス</div><div class="value">${getStatusBadge(eq.lending || eq.status)}</div></div>
+      <div class="detail-item"><div class="label">貸出先</div><div class="value" style="font-weight:700;color:var(--warning)">${eq.location || '-'}</div></div>
+      <div class="detail-item"><div class="label">保管場所</div><div class="value">${eq.storage || '-'}</div></div>
+    </div>
+    <div style="text-align:center;margin-top:16px;font-size:15px;color:var(--gray-700)">
+      この機器を <strong>返却</strong> しますか？
+    </div>
+  `;
+  document.getElementById('modalFooter').innerHTML = `
+    <button class="btn btn-outline" onclick="closeModal()">キャンセル</button>
+    <button class="btn btn-success btn-lg" onclick="closeModal();executeReturn(allEquipment.find(e=>e.id==='${eq.id}')).then(()=>{renderAreaGrid();renderRecentActivity()})">&#8617; 返却する</button>
+  `;
+  openModal();
+}
+
 async function processReturn() {
   const input = document.getElementById('barcodeInput');
-  const equipmentId = input.value.trim().toUpperCase();
+  const rawValue = input.value;
+  const equipmentId = cleanScannedId(rawValue);
+
+  console.log('[Return Debug] raw:', JSON.stringify(rawValue), '→ cleaned:', equipmentId);
 
   if (!equipmentId) {
     showToast('返却する機器IDを入力してください', 'error');
     return;
   }
 
-  let eq = allEquipment.find(e => e.id.toUpperCase() === equipmentId);
+  let eq = allEquipment.find(e => e.id === equipmentId);
+  if (!eq) eq = allEquipment.find(e => e.id.toUpperCase() === equipmentId);
+  if (!eq) eq = allEquipment.find(e => equipmentId.includes(e.id.toUpperCase()));
+
+  console.log('[Return Debug] found eq:', eq ? eq.id : 'null', 'status:', eq?.status, 'lending:', eq?.lending);
+
   if (!eq) {
     showToast(`機器ID「${equipmentId}」が見つかりません`, 'error');
     input.value = '';
@@ -2849,7 +3061,8 @@ async function processReturn() {
     return;
   }
 
-  await executeReturn(eq);
+  // 返却確認モーダルを表示
+  showReturnConfirmModal(eq);
   input.value = '';
   input.focus();
 }
@@ -3918,6 +4131,9 @@ function onQrScanned(text) {
   if (qrTarget === 'lending') {
     document.getElementById('barcodeInput').value = text;
     processBarcode();
+  } else if (qrTarget === 'return') {
+    document.getElementById('barcodeInput').value = text;
+    processReturn();
   } else if (qrTarget === 'inspection') {
     document.getElementById('inspEqId').value = text;
     lookupInspEquipment();
@@ -4641,28 +4857,28 @@ async function moveArea(areaId, direction) {
 }
 
 async function refreshLendingAreas() {
-  // 部署管理から貸出先エリアを読み込む
-  const depts = await dbGetAll('departments');
-  if (depts.length > 0) {
-    depts.sort((a,b) => (a.deptId || '').localeCompare(b.deptId || ''));
-    window._dynamicAreas = depts.map(d => d.name);
-  } else {
-    // 部署が空の場合はエリア管理から読み込む（フォールバック）
-    const areas = await dbGetAll('areas');
+  // エリア管理から貸出先エリアを読み込む
+  const areas = await dbGetAll('areas');
+  if (areas.length > 0) {
     areas.sort((a,b) => (a.sortOrder||0) - (b.sortOrder||0));
     window._dynamicAreas = areas.map(a => a.name);
+  } else {
+    // エリアが空の場合はデフォルト空配列
+    window._dynamicAreas = [];
   }
   renderAreaGrid();
 }
 
-// Override renderAreaGrid to use dynamic areas (from departments) if available
+// Override renderAreaGrid to use dynamic areas (from area master)
 const _origRenderAreaGrid = renderAreaGrid;
 renderAreaGrid = function() {
   const grid = document.getElementById('areaGrid');
-  const areas = window._dynamicAreas || (typeof LENDING_AREAS !== 'undefined' ? LENDING_AREAS : [
-    '3階西病棟','3階東病棟','4階西病棟','4階東病棟','手術室','ER','ICU','透析室',
-    'リハビリ室','化学療法室','内視鏡室','Angio室','カテ室','中央処置室','検査室','ME室'
-  ]);
+  const areas = window._dynamicAreas || [];
+
+  if (areas.length === 0) {
+    grid.innerHTML = '<p style="color:var(--gray-400);text-align:center;padding:20px;grid-column:1/-1">エリアが登録されていません。<br>サイドメニューの「エリア管理」からエリアを登録してください。</p>';
+    return;
+  }
 
   const icons = {
     '3階西病棟':'&#127970;','3階東病棟':'&#127970;','4階西病棟':'&#127970;','4階東病棟':'&#127970;',

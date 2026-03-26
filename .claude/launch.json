@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "me-equipment-server",
+      "runtimeExecutable": "powershell.exe",
+      "runtimeArgs": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "C:\\Users\\STH-ME001D\\Desktop\\ME機器管理システム_App\\server.ps1"],
+      "port": 8080
+    }
+  ]
+}
