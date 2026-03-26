@@ -169,7 +169,7 @@ a{color:var(--primary);text-decoration:none}
 .detail-item .value{font-size:14px;font-weight:500}
 
 /* QR Scanner */
-.qr-scanner-area{width:100%;max-width:400px;margin:0 auto;aspect-ratio:1;border-radius:12px;overflow:hidden;background:#000}
+.qr-scanner-area{width:100%;max-width:450px;margin:0 auto;min-height:300px;border-radius:12px;overflow:hidden;background:#000}
 
 /* Responsive */
 @media(max-width:768px){
@@ -226,6 +226,39 @@ a{color:var(--primary);text-decoration:none}
 /* Return button in status view */
 .return-btn{padding:3px 8px;border-radius:6px;border:1px solid var(--success);background:transparent;color:var(--success);font-size:11px;cursor:pointer;font-weight:600}
 .return-btn:hover{background:var(--success);color:#fff}
+
+/* Inspection System */
+.insp-type-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;margin-bottom:20px}
+.insp-type-card{background:#fff;border:2px solid var(--gray-200);border-radius:14px;padding:16px 10px;text-align:center;cursor:pointer;transition:all .2s}
+.insp-type-card:hover{border-color:var(--primary-light);transform:translateY(-2px);box-shadow:0 4px 12px rgba(26,86,219,.15)}
+.insp-type-card.selected{border-color:var(--primary);background:rgba(59,130,246,.05);box-shadow:0 0 0 3px rgba(59,130,246,.2)}
+.insp-type-card .insp-icon{font-size:28px;margin-bottom:6px}
+.insp-type-card .insp-name{font-size:13px;font-weight:700}
+.insp-tabs{display:flex;gap:0;margin-bottom:20px;border-bottom:2px solid var(--gray-200)}
+.insp-tab{padding:10px 20px;cursor:pointer;font-size:14px;font-weight:600;color:var(--gray-500);border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .15s}
+.insp-tab:hover{color:var(--gray-700)}
+.insp-tab.active{color:var(--primary);border-bottom-color:var(--primary)}
+.insp-form-section{background:var(--gray-50);border-radius:12px;padding:16px;margin-bottom:16px}
+.insp-form-section h4{font-size:14px;font-weight:700;margin-bottom:12px;color:var(--gray-700)}
+.insp-check-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--gray-200)}
+.insp-check-row:last-child{border-bottom:none}
+.insp-check-row label{font-size:14px;color:var(--gray-700);flex:1}
+.toggle-switch{position:relative;width:44px;height:24px;flex-shrink:0}
+.toggle-switch input{opacity:0;width:0;height:0}
+.toggle-slider{position:absolute;cursor:pointer;inset:0;background:var(--gray-300);border-radius:24px;transition:.2s}
+.toggle-slider:before{content:'';position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.2s}
+.toggle-switch input:checked+.toggle-slider{background:var(--success)}
+.toggle-switch input:checked+.toggle-slider:before{transform:translateX(20px)}
+.insp-bulk-check{background:linear-gradient(135deg,var(--success),#047857);color:#fff;border-radius:10px;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;cursor:pointer}
+.insp-bulk-check .bulk-label{font-size:15px;font-weight:700}
+.insp-eq-list{max-height:300px;overflow-y:auto}
+.insp-eq-item{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid var(--gray-100);cursor:pointer;transition:background .15s}
+.insp-eq-item:hover{background:var(--gray-50)}
+.insp-eq-item .eq-info{flex:1}
+.insp-eq-item .eq-info .eq-id{font-weight:700;color:var(--primary);font-size:14px}
+.insp-eq-item .eq-info .eq-name{font-size:12px;color:var(--gray-500)}
+.insp-history-item{background:#fff;border-radius:10px;padding:14px;margin-bottom:8px;box-shadow:0 1px 2px rgba(0,0,0,.06);cursor:pointer;transition:all .15s}
+.insp-history-item:hover{box-shadow:0 2px 8px rgba(0,0,0,.12)}
 </style>
 </head>
 <body>
@@ -283,6 +316,9 @@ a{color:var(--primary);text-decoration:none}
     <div class="nav-item" data-screen="inventory" onclick="showScreen('inventory')">
       <span class="icon">&#128666;</span>入出庫管理
     </div>
+    <div class="nav-item" data-screen="orders" onclick="showScreen('orders')">
+      <span class="icon">&#128203;</span>発注管理
+    </div>
   </nav>
 </aside>
 
@@ -334,8 +370,8 @@ a{color:var(--primary);text-decoration:none}
           <input type="text" class="barcode-input" id="barcodeInput" placeholder="機器IDをスキャンまたは入力..." autocomplete="off" autofocus>
           <button class="btn btn-lg" style="background:rgba(255,255,255,.2);color:#fff;border:1px solid rgba(255,255,255,.3)" onclick="processBarcode()">&#128228; 貸出</button>
           <button class="btn btn-lg btn-warning" onclick="processReturn()" title="返却処理">&#8617; 返却</button>
-          <button class="btn btn-lg" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3)" onclick="startQrScan('lending')" title="カメラで貸出スキャン">&#128247;</button>
-          <button class="btn btn-lg" style="background:rgba(255,200,50,.25);color:#fff;border:1px solid rgba(255,200,50,.4)" onclick="startQrScan('return')" title="カメラで返却スキャン">&#128247;&#8617;</button>
+          <button class="btn btn-lg" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3)" onclick="startQrScan('lending')" title="カメラでQR/バーコードスキャン（貸出）">&#128247;</button>
+          <button class="btn btn-lg" style="background:rgba(255,200,50,.25);color:#fff;border:1px solid rgba(255,200,50,.4)" onclick="startQrScan('return')" title="カメラでQR/バーコードスキャン（返却）">&#128247;&#8617;</button>
         </div>
       </div>
 
@@ -427,40 +463,65 @@ a{color:var(--primary);text-decoration:none}
 
     <!-- ========== 点検登録画面 ========== -->
     <div class="screen" id="screen-inspection">
-      <div class="card" style="max-width:700px">
-        <div class="card-header">
-          <h3>&#9989; 点検登録</h3>
+      <!-- Tabs: 新規点検 / 点検履歴 -->
+      <div class="insp-tabs">
+        <div class="insp-tab active" onclick="switchInspTab('new')">新規点検</div>
+        <div class="insp-tab" onclick="switchInspTab('history')">点検履歴</div>
+      </div>
+
+      <!-- 新規点検タブ -->
+      <div id="inspTabNew">
+        <!-- Barcode/ID入力 -->
+        <div class="barcode-section">
+          <h3>機器ID入力</h3>
+          <div class="barcode-input-wrap">
+            <input type="text" class="barcode-input" id="inspEqId" placeholder="機器IDを入力またはスキャン...">
+            <button class="btn" style="background:rgba(255,255,255,.2);color:#fff" onclick="startQrScan('inspection')">&#128247;</button>
+          </div>
+          <div id="inspEqInfo" style="margin-top:10px"></div>
         </div>
-        <div class="card-body">
-          <div class="form-group">
-            <label class="form-label">機器ID（QRスキャンまたは入力）</label>
-            <div style="display:flex;gap:8px">
-              <input type="text" class="form-input" id="inspEqId" placeholder="機器IDを入力...">
-              <button class="btn btn-primary" onclick="startQrScan('inspection')">&#128247; QRスキャン</button>
+
+        <!-- 機器タイプ選択グリッド -->
+        <div id="inspTypeGrid" class="insp-type-grid"></div>
+
+        <!-- 選択タイプの機器リスト -->
+        <div id="inspEqListPanel" style="display:none">
+          <div class="card" style="margin-bottom:16px">
+            <div class="card-header">
+              <h3 id="inspEqListTitle">機器一覧</h3>
+              <button class="btn btn-sm btn-outline" onclick="closeInspEqList()">&#10005; 閉じる</button>
             </div>
+            <div class="card-body insp-eq-list" id="inspEqListBody"></div>
           </div>
-          <div id="inspEqInfo" style="display:none;margin-bottom:16px"></div>
-          <div class="form-group">
-            <label class="form-label">点検区分</label>
-            <select class="form-select" id="inspType">
-              <option value="日常点検">日常点検</option>
-              <option value="定期点検">定期点検</option>
-              <option value="6ヵ月点検">6ヵ月点検</option>
-              <option value="定期点検（4ヵ月）">定期点検（4ヵ月）</option>
-              <option value="定期点検(6カ月)">定期点検（6ヵ月）</option>
-            </select>
-          </div>
-          <div id="inspCheckItems"></div>
-          <div class="form-group">
-            <label class="form-label">コメント</label>
-            <textarea class="form-textarea" id="inspComment" placeholder="点検コメント..."></textarea>
-          </div>
-          <div class="form-group">
-            <label class="form-label">点検者</label>
-            <select class="form-select" id="inspStaff"></select>
-          </div>
-          <button class="btn btn-success btn-lg" onclick="submitInspection()" style="width:100%">&#9989; 点検結果を登録</button>
         </div>
+
+        <!-- 動的点検フォーム -->
+        <div id="inspFormPanel" style="display:none">
+          <div class="card" style="max-width:750px">
+            <div class="card-header">
+              <h3 id="inspFormTitle">点検フォーム</h3>
+              <button class="btn btn-sm btn-outline" onclick="closeInspForm()">&#10005; 閉じる</button>
+            </div>
+            <div class="card-body" id="inspFormBody"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 点検履歴タブ -->
+      <div id="inspTabHistory" style="display:none">
+        <div class="filter-bar">
+          <div class="search-box" style="flex:1;max-width:300px">
+            <span class="search-icon">&#128269;</span>
+            <input type="text" id="inspHistSearch" placeholder="機器IDで検索..." oninput="filterInspHistory()">
+          </div>
+          <select class="filter-select" id="inspHistTypeFilter" onchange="filterInspHistory()">
+            <option value="">全タイプ</option>
+          </select>
+          <input type="date" id="inspHistDateFrom" class="form-input" style="width:auto;padding:6px 10px;font-size:13px" onchange="filterInspHistory()">
+          <span style="color:var(--gray-400)">〜</span>
+          <input type="date" id="inspHistDateTo" class="form-input" style="width:auto;padding:6px 10px;font-size:13px" onchange="filterInspHistory()">
+        </div>
+        <div id="inspHistoryList"></div>
       </div>
     </div>
 
@@ -753,6 +814,143 @@ a{color:var(--primary);text-decoration:none}
       </div>
     </div>
 
+    <!-- ========== 発注管理画面 ========== -->
+    <div class="screen" id="screen-orders">
+      <div style="display:flex;gap:4px;margin-bottom:16px;background:#fff;border:1px solid var(--gray-300);border-radius:8px;overflow:hidden;width:fit-content">
+        <button id="orderTabRegister" class="btn btn-sm" onclick="setOrderTab('register')" style="border-radius:6px;border:none;background:var(--primary);color:#fff;font-weight:600">発注登録</button>
+        <button id="orderTabList" class="btn btn-sm" onclick="setOrderTab('list')" style="border-radius:6px;border:none;background:#fff;color:var(--gray-600)">発注一覧</button>
+        <button id="orderTabPrint" class="btn btn-sm" onclick="setOrderTab('print')" style="border-radius:6px;border:none;background:#fff;color:var(--gray-600)">発注書印刷</button>
+      </div>
+
+      <!-- 発注登録タブ -->
+      <div id="orderSectionRegister">
+        <div style="background:linear-gradient(135deg,var(--primary),var(--primary-dark));border-radius:14px;padding:20px;color:#fff;margin-bottom:20px">
+          <h4 style="font-size:14px;opacity:.9;margin-bottom:10px">&#128274; バーコードスキャン（発注）</h4>
+          <div style="display:flex;gap:12px;align-items:center">
+            <input type="text" id="orderScanInput" class="barcode-input" style="flex:1" placeholder="GS1-128 / JANコードをスキャン..." onkeydown="if(event.key==='Enter'){processOrderScan()}">
+            <button class="btn" style="background:rgba(255,255,255,.2);color:#fff" onclick="startQrScan('order')">&#128247;</button>
+            <button class="btn" style="background:rgba(255,255,255,.2);color:#fff" onclick="processOrderScan()">&#128269; 読取</button>
+          </div>
+          <div id="orderScanStatus" style="margin-top:8px;font-size:13px;opacity:.85"></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><h3>発注登録フォーム</h3></div>
+          <div class="card-body">
+            <div id="orderItemInfo" style="display:none;background:var(--gray-50);border-radius:8px;padding:12px 16px;margin-bottom:16px;border:1px solid var(--gray-200)">
+              <div style="font-size:13px;color:var(--gray-500);margin-bottom:4px">商品情報</div>
+              <div id="orderItemInfoContent" style="font-weight:600"></div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+              <div>
+                <label style="font-size:13px;font-weight:600;color:var(--gray-600);display:block;margin-bottom:4px">発注日</label>
+                <input type="date" id="orderDate" class="form-input" style="width:100%">
+              </div>
+              <div>
+                <label style="font-size:13px;font-weight:600;color:var(--gray-600);display:block;margin-bottom:4px">JANコード</label>
+                <input type="text" id="orderJanCode" class="form-input" style="width:100%" placeholder="JANコード">
+              </div>
+              <div>
+                <label style="font-size:13px;font-weight:600;color:var(--gray-600);display:block;margin-bottom:4px">商品名</label>
+                <input type="text" id="orderProductName" class="form-input" style="width:100%;background:var(--gray-50)" readonly>
+              </div>
+              <div>
+                <label style="font-size:13px;font-weight:600;color:var(--gray-600);display:block;margin-bottom:4px">単価</label>
+                <input type="text" id="orderUnitPrice" class="form-input" style="width:100%;background:var(--gray-50)" readonly>
+              </div>
+              <div>
+                <label style="font-size:13px;font-weight:600;color:var(--gray-600);display:block;margin-bottom:4px">発注数量</label>
+                <div style="display:flex;align-items:center;gap:8px">
+                  <button class="btn btn-sm btn-outline" onclick="adjustOrderQty(-1)">−</button>
+                  <input type="number" id="orderQty" class="form-input" style="width:80px;text-align:center" value="1" min="1">
+                  <button class="btn btn-sm btn-outline" onclick="adjustOrderQty(1)">+</button>
+                </div>
+              </div>
+              <div>
+                <label style="font-size:13px;font-weight:600;color:var(--gray-600);display:block;margin-bottom:4px">発注単位</label>
+                <input type="text" id="orderUnit" class="form-input" style="width:100%;background:var(--gray-50)" readonly>
+              </div>
+              <div>
+                <label style="font-size:13px;font-weight:600;color:var(--gray-600);display:block;margin-bottom:4px">ステータス</label>
+                <select id="orderStatus" class="form-input" style="width:100%">
+                  <option value="未発注">未発注</option>
+                  <option value="発注済み">発注済み</option>
+                  <option value="入荷済み">入荷済み</option>
+                </select>
+              </div>
+              <div style="grid-column:1/-1">
+                <label style="font-size:13px;font-weight:600;color:var(--gray-600);display:block;margin-bottom:4px">備考</label>
+                <textarea id="orderRemarks" class="form-input" style="width:100%;min-height:60px" placeholder="発注理由など"></textarea>
+              </div>
+            </div>
+            <div style="margin-top:16px;display:flex;gap:8px">
+              <button class="btn btn-primary btn-lg" onclick="submitOrder()">&#128190; 発注登録</button>
+              <button class="btn btn-outline" onclick="resetOrderForm()">&#128260; リセット</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 発注一覧タブ -->
+      <div id="orderSectionList" style="display:none">
+        <div class="filter-bar" style="margin-bottom:16px">
+          <div class="search-box" style="flex:1;max-width:300px">
+            <span class="search-icon">&#128269;</span>
+            <input type="text" id="orderSearch" placeholder="商品名・JANコードで検索..." oninput="filterOrders()">
+          </div>
+          <select class="filter-select" id="orderStatusFilter" onchange="filterOrders()">
+            <option value="">全て</option>
+            <option value="未発注">未発注</option>
+            <option value="発注済み">発注済み</option>
+            <option value="入荷済み">入荷済み</option>
+          </select>
+          <input type="date" id="orderDateFrom" class="form-input" style="width:auto;padding:6px 10px;font-size:13px" onchange="filterOrders()">
+          <span style="color:var(--gray-400)">〜</span>
+          <input type="date" id="orderDateTo" class="form-input" style="width:auto;padding:6px 10px;font-size:13px" onchange="filterOrders()">
+        </div>
+        <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center">
+          <label style="font-size:13px"><input type="checkbox" id="orderSelectAll" onchange="toggleOrderSelectAll()"> 全選択</label>
+          <select id="orderBulkStatus" class="form-input" style="width:auto;padding:4px 8px;font-size:13px">
+            <option value="未発注">未発注</option>
+            <option value="発注済み">発注済み</option>
+            <option value="入荷済み">入荷済み</option>
+          </select>
+          <button class="btn btn-sm btn-warning" onclick="bulkUpdateStatus()">一括ステータス変更</button>
+        </div>
+        <div class="card">
+          <div class="card-body" style="overflow-x:auto;padding:0">
+            <table class="eq-table">
+              <thead>
+                <tr>
+                  <th style="width:30px"><input type="checkbox" id="orderSelectAllHead" onchange="toggleOrderSelectAll()"></th>
+                  <th>発注日</th><th>JANコード</th><th>商品名</th><th>数量</th><th>単位</th><th>金額</th><th>ステータス</th><th>備考</th><th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="orderListBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- 発注書印刷タブ -->
+      <div id="orderSectionPrint" style="display:none">
+        <div class="card">
+          <div class="card-header"><h3>発注書印刷</h3></div>
+          <div class="card-body">
+            <div style="display:flex;gap:16px;align-items:flex-end;margin-bottom:20px">
+              <div>
+                <label style="font-size:13px;font-weight:600;color:var(--gray-600);display:block;margin-bottom:4px">発注日を選択</label>
+                <input type="date" id="orderPrintDate" class="form-input" onchange="updateOrderPrintPreview()">
+              </div>
+              <button class="btn btn-primary" onclick="generateOrderPDF()">&#128424; PDF生成・印刷</button>
+            </div>
+            <div id="orderPrintPreview" style="border:1px solid var(--gray-200);border-radius:8px;padding:20px;background:var(--gray-50);min-height:200px">
+              <p style="color:var(--gray-400);text-align:center;margin-top:60px">日付を選択すると発注書のプレビューが表示されます</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -772,12 +970,12 @@ a{color:var(--primary);text-decoration:none}
 <div class="modal-overlay" id="qrOverlay" onclick="if(event.target===this)closeQrScanner()">
   <div class="modal" style="max-width:480px">
     <div class="modal-header">
-      <h3>QRコードスキャン</h3>
+      <h3>QR / バーコード スキャン</h3>
       <button class="modal-close" onclick="closeQrScanner()">&times;</button>
     </div>
     <div class="modal-body">
       <div id="qrReader" class="qr-scanner-area"></div>
-      <p style="text-align:center;margin-top:12px;color:var(--gray-500);font-size:13px">QRコードをカメラに向けてください</p>
+      <p style="text-align:center;margin-top:12px;color:var(--gray-500);font-size:13px">QRコード・GS1-128・JANバーコードをカメラに向けてください</p>
       <div id="qrContinuousStatus" style="display:none;text-align:center;margin-top:8px;padding:8px;background:#065f46;color:#6ee7b7;border-radius:8px;font-size:13px;font-weight:600"></div>
     </div>
   </div>
@@ -1450,7 +1648,8 @@ const SHEET_NAMES = {
   staff: 'スタッフ',
   departments: '部署',
   areas: '貸出エリア',
-  items: '物品マスター'
+  items: '物品マスター',
+  orders: '発注データ'
 };
 
 // ===== ヘルパー関数 =====
@@ -1529,6 +1728,7 @@ function doGet(e) {
       case 'getDepartments': result = handleGetDepartments(); break;
       case 'getAreas': result = handleGetAreas(); break;
       case 'getItems': result = handleGetItems(); break;
+      case 'getOrders': result = handleGetOrders(); break;
       default: result = { success: false, error: 'Unknown action: ' + action };
     }
   } catch (error) {
@@ -1550,6 +1750,7 @@ function doPost(e) {
       case 'deleteEquipment': result = handleDeleteEquipment(body.id); break;
       case 'addLending': result = handleAddLending(body.data); break;
       case 'addInspection': result = handleAddInspection(body.data); break;
+      case 'addTypedInspection': result = handleAddTypedInspection(body.sheetName, body.data); break;
       case 'addRepair': result = handleAddRepair(body.data); break;
       case 'saveStaff': result = handleSaveStaff(body.data); break;
       case 'deleteStaff': result = handleDeleteStaff(body.id); break;
@@ -1559,6 +1760,8 @@ function doPost(e) {
       case 'deleteArea': result = handleDeleteArea(body.id); break;
       case 'saveItem': result = handleSaveItem(body.data); break;
       case 'deleteItem': result = handleDeleteItem(body.id); break;
+      case 'saveOrder': result = handleSaveOrder(body.data); break;
+      case 'deleteOrder': result = handleDeleteOrder(body.id); break;
       case 'syncAll': result = handleSyncAll(body.data); break;
       case 'updateEquipmentField': result = handleUpdateEquipmentField(body.id, body.field, body.value); break;
       default: result = { success: false, error: 'Unknown action: ' + action };
@@ -1745,6 +1948,26 @@ function handleAddInspection(data) {
     data.inspector || '', data.type || '',
     data.result || '', data.notes || ''
   ]);
+  return { success: true };
+}
+
+function handleAddTypedInspection(sheetName, data) {
+  if (!sheetName || !data) return { success: false, error: 'Missing sheetName or data' };
+  const sheet = getOrCreateSheet(sheetName);
+  const keys = Object.keys(data);
+  if (sheet.getLastRow() < 1) {
+    sheet.getRange(1, 1, 1, keys.length).setValues([keys]);
+  }
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  // Add missing headers
+  keys.forEach(k => {
+    if (!headers.includes(k)) {
+      headers.push(k);
+      sheet.getRange(1, headers.length).setValue(k);
+    }
+  });
+  const row = headers.map(h => data[h] !== undefined ? data[h] : '');
+  sheet.appendRow(row);
   return { success: true };
 }
 
@@ -1937,13 +2160,43 @@ function handleSaveItem(data) {
 }
 function handleDeleteItem(id) { return deleteRowById(SHEET_NAMES.items, id); }
 
+// ===== 発注データ =====
+const ORDER_HEADERS = ['発注ID','発注日','スキャン用','JANコード','発注数量','ステータス','備考'];
+const ORDER_FIELD_MAP = {'発注ID':'orderId','発注日':'date','スキャン用':'scanCode','JANコード':'janCode','発注数量':'quantity','ステータス':'status','備考':'remarks'};
+function handleGetOrders() {
+  const sheet = getOrCreateSheet(SHEET_NAMES.orders);
+  if (sheet.getLastRow() < 1) { sheet.getRange(1,1,1,ORDER_HEADERS.length).setValues([ORDER_HEADERS]); return {success:true,data:[]}; }
+  const result = getSheetData(SHEET_NAMES.orders);
+  return {success:true, data: result.rows.map(row => {
+    const obj = {};
+    for (const [k,v] of Object.entries(row)) { obj[ORDER_FIELD_MAP[k]||k] = v; }
+    return obj;
+  })};
+}
+function handleSaveOrder(data) {
+  const sheet = getOrCreateSheet(SHEET_NAMES.orders);
+  if (sheet.getLastRow() < 1) sheet.getRange(1,1,1,ORDER_HEADERS.length).setValues([ORDER_HEADERS]);
+  const lastRow = sheet.getLastRow();
+  let targetRow = -1;
+  if (lastRow > 1) {
+    const ids = sheet.getRange(2,1,lastRow-1,1).getValues();
+    for (let i=0;i<ids.length;i++) { if (String(ids[i][0])===String(data.orderId)) { targetRow=i+2; break; } }
+  }
+  const row = [data.orderId||'',data.date||'',data.scanCode||'',data.janCode||'',data.quantity||'',data.status||'',data.remarks||''];
+  if (targetRow===-1) sheet.appendRow(row);
+  else sheet.getRange(targetRow,1,1,row.length).setValues([row]);
+  return {success:true};
+}
+function handleDeleteOrder(id) { return deleteRowById(SHEET_NAMES.orders, id); }
+
 // ===== 全データ取得・同期 =====
 function handleGetAll() {
   return {
     success: true,
     equipment: handleGetEquipment(), staff: handleGetStaff(),
     departments: handleGetDepartments(), areas: handleGetAreas(),
-    lending: handleGetLending(), items: handleGetItems()
+    lending: handleGetLending(), items: handleGetItems(),
+    orders: handleGetOrders()
   };
 }
 
@@ -1954,6 +2207,7 @@ function handleSyncAll(data) {
   if (data.departments) { for (const d of data.departments) handleSaveDepartment(d); results.departments = { success: true, count: data.departments.length }; }
   if (data.areas) { for (const a of data.areas) handleSaveArea(a); results.areas = { success: true, count: data.areas.length }; }
   if (data.items) { for (const it of data.items) handleSaveItem(it); results.items = { success: true, count: data.items.length }; }
+  if (data.orders) { for (const o of data.orders) handleSaveOrder(o); results.orders = { success: true, count: data.orders.length }; }
   return { success: true, results };
 }
 
@@ -2164,6 +2418,18 @@ async function pullFromSheets() {
     }
     allItems = await dbGetAll('items');
 
+    // ── 発注データ (orders) ──
+    const ordResult = result.orders;
+    if (ordResult && ordResult.success && ordResult.data && ordResult.data.length > 0) {
+      const tx = db.transaction('orders', 'readwrite');
+      const store = tx.objectStore('orders');
+      for (const o of ordResult.data) {
+        if (o.orderId) store.put(o);
+      }
+      await new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = rej; });
+      totalCount += ordResult.data.length;
+    }
+
     lastSyncTime = new Date().toISOString();
     localStorage.setItem('ME_LAST_SYNC', lastSyncTime);
     updateSyncUI('connected', `Sheets同期済 (${totalCount}件)`);
@@ -2248,9 +2514,10 @@ async function pushAllToSheets() {
     const staff = await dbGetAll('staff');
     const departments = await dbGetAll('departments');
     const areas = await dbGetAll('areas');
+    const orders = await dbGetAll('orders');
 
     const result = await gasPost('syncAll', {
-      data: { equipment, staff, departments, areas }
+      data: { equipment, staff, departments, areas, orders }
     });
 
     if (result.success) {
@@ -2476,7 +2743,7 @@ async function testGasConnection() {
 
 // ===================== DATABASE =====================
 const DB_NAME = 'MEEquipmentDB';
-const DB_VERSION = 5;
+const DB_VERSION = 7;
 let db = null;
 
 function openDB() {
@@ -2500,6 +2767,12 @@ function openDB() {
         const iStore = d.createObjectStore('inspections', { keyPath: 'inspId' });
         iStore.createIndex('equipmentId', 'equipmentId');
         iStore.createIndex('date', 'date');
+        iStore.createIndex('equipmentType', 'equipmentType');
+      } else {
+        const iStore = e.target.transaction.objectStore('inspections');
+        if (!iStore.indexNames.contains('equipmentType')) {
+          iStore.createIndex('equipmentType', 'equipmentType');
+        }
       }
       if (!d.objectStoreNames.contains('repairs')) {
         const rStore = d.createObjectStore('repairs', { keyPath: 'repairId' });
@@ -2525,6 +2798,12 @@ function openDB() {
         invStore.createIndex('itemId', 'itemId');
         invStore.createIndex('date', 'date');
         invStore.createIndex('type', 'type');
+      }
+      if (!d.objectStoreNames.contains('orders')) {
+        const ordStore = d.createObjectStore('orders', { keyPath: 'orderId' });
+        ordStore.createIndex('date', 'date');
+        ordStore.createIndex('janCode', 'janCode');
+        ordStore.createIndex('status', 'status');
       }
     };
     req.onsuccess = (e) => { db = e.target.result; resolve(db); };
@@ -2749,7 +3028,7 @@ function showScreen(name) {
     inspection: '点検登録', repair: '修理記録', history: '貸出履歴', dashboard: 'ダッシュボード',
     'master-equipment': '機器マスター管理', 'master-staff': 'スタッフ管理',
     'master-dept': '部署管理', 'master-area': '貸出エリア管理', 'master-items': '物品マスター',
-    inventory: '入出庫管理'
+    inventory: '入出庫管理', orders: '発注管理'
   };
   document.getElementById('screenTitle').textContent = titles[name] || '';
   location.hash = name;
@@ -2770,6 +3049,8 @@ function showScreen(name) {
   if (name === 'master-area') renderAreaList();
   if (name === 'master-items') initItemsMaster();
   if (name === 'inventory') initInventory();
+  if (name === 'orders') initOrders();
+  if (name === 'inspection') initInspectionScreen();
 
   // Close mobile sidebar
   closeSidebar();
@@ -3461,104 +3742,757 @@ async function filterHistory() {
 }
 
 // ===================== INSPECTION =====================
+const INSPECTION_TYPES = {
+  infusionPump: {
+    name: '輸液ポンプ', icon: '\uD83D\uDC89', idPatterns: ['CE-IP','DE-IP'],
+    sheetName: '輸液ポンプ点検', gid: 305816429, idField: '機器ID', inspectorField: '点検者',
+    categories: ['日常点検','定期点検','定期点検(6カ月)','定期点検（4ヶ月）'],
+    fields: [
+      {key:'bulkCheck',label:'一括チェック',type:'checkbox_all'},
+      {key:'appearance',label:'外観点検',type:'check'},
+      {key:'selfCheck',label:'セルフチェック',type:'check'},
+      {key:'powerConnect',label:'電源接続動作',type:'check'},
+      {key:'tubeClamp',label:'チューブクランプ動作',type:'check'},
+      {key:'switchOp',label:'スイッチ操作',type:'check'},
+      {key:'bubbleDetect',label:'気泡検出機能',type:'check'},
+      {key:'occlusionDetect',label:'閉塞圧検出機能',type:'check'},
+      {key:'occlusionPressure',label:'閉塞圧',type:'select',options:['OK','M','NG']},
+      {key:'flowAccuracy',label:'流量精度',type:'check'},
+      {key:'flowRate',label:'流量',type:'number',unit:'mL/h'},
+      {key:'battery',label:'バッテリ点検',type:'check'},
+      {key:'batteryReplace',label:'バッテリ交換日',type:'text'},
+      {key:'comment',label:'コメント',type:'text'}
+    ]
+  },
+  syringePump: {
+    name: 'シリンジポンプ', icon: '\uD83D\uDC89', idPatterns: ['CE-SP','DE-SP'],
+    sheetName: 'シリンジポンプ点検', gid: 1915372484, idField: '機器ID', inspectorField: '点検者',
+    categories: ['日常点検','定期点検','定期点検(6カ月)','定期点検（4ヶ月）'],
+    fields: [
+      {key:'bulkCheck',label:'一括チェック',type:'checkbox_all'},
+      {key:'appearance',label:'外観点検',type:'check'},
+      {key:'selfCheck',label:'セルフチェック',type:'check'},
+      {key:'powerConnect',label:'電源接続動作',type:'check'},
+      {key:'operation',label:'動作確認',type:'check'},
+      {key:'switchOp',label:'スイッチ操作',type:'check'},
+      {key:'occlusionSetting',label:'閉塞圧設定確認',type:'check'},
+      {key:'occlusionDetect',label:'閉塞圧検出機能',type:'check'},
+      {key:'occlusionPressure',label:'閉塞圧',type:'select',options:['OK','M','NG']},
+      {key:'flowAccuracy',label:'流量精度',type:'check'},
+      {key:'flowRate',label:'流量',type:'number',unit:'mL/h'},
+      {key:'battery',label:'バッテリ点検',type:'check'},
+      {key:'batteryReplace',label:'バッテリ交換日',type:'text'},
+      {key:'comment',label:'コメント',type:'text'}
+    ]
+  },
+  ventilator: {
+    name: '人工呼吸器', icon: '\uD83C\uDFE5', idPatterns: ['CE-RE','DE-RE'],
+    sheetName: '人工呼吸器点検', gid: 200938452, idField: '機器ID', inspectorField: '点検者',
+    categories: ['日常点検','定期点検','定期点検(6カ月)'],
+    fields: [
+      {key:'cleaning',label:'清掃',type:'check'},
+      {key:'appearance',label:'外観点検',type:'check'},
+      {key:'o2Tube',label:'酸素耐圧管外観',type:'check'},
+      {key:'filterClean',label:'フィルタ清掃',type:'check'},
+      {key:'selfTest',label:'セルフテスト',type:'check'},
+      {key:'powerBattery',label:'電源・バッテリテスト',type:'check'},
+      {key:'keyCheck',label:'キー動作確認',type:'check'},
+      {key:'ventilation',label:'換気動作',type:'check'},
+      {key:'leakTest',label:'リークテスト',type:'check'},
+      {key:'flowSensor',label:'フローセンサ校正',type:'check'},
+      {key:'o2Calibration',label:'酸素セル校正',type:'check'},
+      {key:'o2SupplyAlarm',label:'酸素供給アラーム',type:'check'},
+      {key:'highPressAlarm',label:'高圧アラーム',type:'check'},
+      {key:'otherAlarm',label:'その他アラーム',type:'check'},
+      {key:'backupVent',label:'バックアップ換気動作の確認',type:'check'},
+      {key:'battery',label:'バッテリ点検',type:'check'},
+      {key:'simvTv',label:'呼気一回換気量（SIMV+）',type:'number'},
+      {key:'simvTvAnalyzer',label:'呼気一回換気量（SIMV+） アナライザー',type:'number'},
+      {key:'simvMv',label:'呼気分時換気量（SIMV+）',type:'number'},
+      {key:'simvMvAnalyzer',label:'呼気分時換気量（SIMV+） アナライザー',type:'number'},
+      {key:'simvRr',label:'呼吸回数（SIMV+）',type:'number'},
+      {key:'simvRrAnalyzer',label:'呼吸回数（SIMV+） アナライザー',type:'number'},
+      {key:'simvTi',label:'吸気時間（SIMV+）',type:'number'},
+      {key:'simvTiAnalyzer',label:'吸気時間（SIMV+） アナライザー',type:'number'},
+      {key:'simvPeep',label:'PEEP（SIMV+）',type:'number'},
+      {key:'simvPeepAnalyzer',label:'PEEP（SIMV+） アナライザー',type:'number'},
+      {key:'simvO2',label:'酸素濃度（SIMV+）',type:'number'},
+      {key:'simvO2Analyzer',label:'酸素濃度（SIMV+） アナライザー',type:'number'},
+      {key:'pcvPip',label:'最高気道内圧（PCV+）',type:'number'},
+      {key:'pcvPipAnalyzer',label:'最高気道内圧（PCV+） アナライザー',type:'number'},
+      {key:'pcvRr',label:'呼吸回数（PCV+）',type:'number'},
+      {key:'pcvRrAnalyzer',label:'呼吸回数（PCV+） アナライザー',type:'number'},
+      {key:'pcvIe',label:'I:E比（PCV+）',type:'text'},
+      {key:'pcvIeAnalyzer',label:'I:E比（PCV+） アナライザー',type:'text'},
+      {key:'pcvPeep',label:'PEEP/CPAP（PCV+）',type:'number'},
+      {key:'pcvPeepAnalyzer',label:'PEEP/CPAP（PCV+） アナライザー',type:'number'},
+      {key:'pcvO2',label:'酸素濃度（PCV+）',type:'number'},
+      {key:'pcvO2Analyzer',label:'酸素濃度（PCV+） アナライザー',type:'number'},
+      {key:'o2CellReplace',label:'酸素セル交換',type:'text'},
+      {key:'hepaReplace',label:'HEPAフィルタ交換',type:'text'},
+      {key:'dustReplace',label:'ダストフィルタセット交換',type:'text'},
+      {key:'backupBattReplace',label:'バックアップバッテリ交換',type:'text'},
+      {key:'humidifierCode',label:'加温加湿器機器コード',type:'text'},
+      {key:'humidifierCheck',label:'加温加湿器動作確認',type:'check'},
+      {key:'comment',label:'備考',type:'text'}
+    ]
+  },
+  defibrillator: {
+    name: '除細動器', icon: '\u26A1', idPatterns: ['CE-DC','DE-DC'],
+    sheetName: '除細動器点検', gid: 1434266603, idField: '機器ID', inspectorField: '点検者',
+    categories: ['日常点検','定期点検','定期点検(6カ月)'],
+    fields: [
+      {key:'bulkCheck',label:'一括チェック',type:'checkbox_all'},
+      {key:'cleaning',label:'清掃',type:'check'},
+      {key:'bodyPaddle',label:'本体及びパドル',type:'check'},
+      {key:'switchKnob',label:'スイッチツマミ',type:'check'},
+      {key:'ecgCable',label:'心電図誘導ケーブル',type:'check'},
+      {key:'paper',label:'記録紙',type:'check'},
+      {key:'gel',label:'除細動ゲル',type:'check'},
+      {key:'battery',label:'バッテリ',type:'check'},
+      {key:'simpleCheck',label:'簡易動作チェック',type:'check'},
+      {key:'statusIndicator',label:'ステータスインジケータ表示',type:'check'},
+      {key:'chargeTime',label:'充電完了時間',type:'text'},
+      {key:'internalDischarge',label:'内部放電時間・動作',type:'check'},
+      {key:'energyCheck',label:'エネルギ充電量の確認',type:'check'},
+      {key:'printStatus',label:'印字ステイタス',type:'check'},
+      {key:'dateTimeCheck',label:'日付時刻確認',type:'check'},
+      {key:'paperRemain',label:'ペーパー残量',type:'check'},
+      {key:'ac20j',label:'AC電源 20J',type:'number'},
+      {key:'ac70j',label:'AC電源 70J',type:'number'},
+      {key:'ac150j',label:'AC電源 150J',type:'number'},
+      {key:'ac200j',label:'AC電源 200J',type:'number'},
+      {key:'dc200j',label:'内部電源 200J',type:'number'},
+      {key:'outputResult',label:'出力測定結果',type:'text'},
+      {key:'batteryReplace',label:'バッテリ交換',type:'text'},
+      {key:'syncDischarge',label:'同期放電確認',type:'check'},
+      {key:'hr70',label:'心拍70回',type:'check'},
+      {key:'hr180',label:'心拍180回',type:'check'},
+      {key:'ma30',label:'30ｍA',type:'check'},
+      {key:'ma200',label:'200ｍA',type:'check'},
+      {key:'asystole',label:'Asystole',type:'check'},
+      {key:'hrPresent',label:'心拍あり',type:'check'},
+      {key:'vfDefib',label:'VF下除細動150J',type:'check'},
+      {key:'comment',label:'備考',type:'text'}
+    ]
+  },
+  telemetry: {
+    name: '医用テレメーター', icon: '\uD83D\uDCF6', idPatterns: ['TM'],
+    sheetName: '医用テレメーター点検', gid: 683083212, idField: '機器コード', inspectorField: '登録者',
+    categories: ['日常点検','定期点検'],
+    fields: [
+      {key:'bulkCheck',label:'一括チェック',type:'checkbox_all'},
+      {key:'appearance',label:'外観点検',type:'check'},
+      {key:'cleaning',label:'清掃',type:'check'},
+      {key:'ecgCable',label:'心電ケーブル',type:'check'},
+      {key:'spo2Sensor',label:'SPO2センサー',type:'check'},
+      {key:'battery',label:'電池',type:'check'}
+    ]
+  },
+  bedsideMonitor: {
+    name: 'ベッドサイドモニター', icon: '\uD83D\uDDA5', idPatterns: ['BM'],
+    sheetName: 'ベッドサイドモニター点検', gid: 929301363, idField: '機器コード', inspectorField: '登録者',
+    categories: ['日常点検','定期点検'],
+    fields: [
+      {key:'bulkCheck',label:'一括チェック',type:'checkbox_all'},
+      {key:'appearance',label:'外観点検',type:'check'},
+      {key:'cleaning',label:'清掃',type:'check'},
+      {key:'ecgCable',label:'心電ケーブル',type:'check'},
+      {key:'spo2Sensor',label:'SPO2センサー',type:'check'},
+      {key:'battery',label:'バッテリ',type:'check'}
+    ]
+  },
+  suction: {
+    name: '低圧持続吸引機', icon: '\uD83C\uDF2C', idPatterns: ['CE-SD','DE-SD'],
+    sheetName: '低圧持続吸引機点検', gid: 1769894837, idField: '機器ID', inspectorField: '点検者',
+    categories: ['日常点検','定期点検'],
+    fields: [
+      {key:'bulkCheck',label:'一括チェック',type:'checkbox_all'},
+      {key:'cleaning',label:'清掃',type:'check'},
+      {key:'suctionPort',label:'吸引口',type:'check'},
+      {key:'controlPanel',label:'コントロールパネル',type:'check'},
+      {key:'bottleGuide',label:'ボトルガイド',type:'check'},
+      {key:'cordSpool',label:'コードスプール',type:'check'},
+      {key:'trapBottle',label:'トラップボトル',type:'check'},
+      {key:'panelDisplay',label:'コントロールパネル表示',type:'check'},
+      {key:'powerLamp',label:'電源ランプ',type:'check'},
+      {key:'barGraph',label:'バーグラフ',type:'check'},
+      {key:'leakTest',label:'リークテスト',type:'check'},
+      {key:'disassembly',label:'分解・清掃',type:'check'},
+      {key:'battery',label:'バッテリ点検',type:'check'},
+      {key:'comment',label:'備考',type:'text'}
+    ]
+  },
+  anesthesia: {
+    name: '麻酔器', icon: '\uD83D\uDE37', idPatterns: ['CE-AA','DE-AA'],
+    sheetName: '麻酔器点検', gid: 1657040241, idField: '機器ID', inspectorField: '点検者',
+    categories: ['日常点検','定期点検'],
+    fields: [
+      {key:'bulkCheck',label:'一括チェック',type:'checkbox_all'},
+      {key:'gasSupply',label:'ガス供給部余剰麻酔ｶガス排出',type:'check'},
+      {key:'systemCheck',label:'システムチェック画面流量計 O2フラッシュ',type:'check'},
+      {key:'vaporizer',label:'気化器',type:'check'},
+      {key:'circuitBreath',label:'循環式呼吸回路',type:'check'},
+      {key:'leakCheck',label:'リークチェック',type:'check'},
+      {key:'manualMode',label:'用手モードの確認',type:'check'},
+      {key:'alarm',label:'アラーム',type:'check'},
+      {key:'expMv',label:'呼気分時換気量',type:'number'},
+      {key:'expMvAnalyzer',label:'呼気分時換気量（ｱﾅﾗｲｻﾞｰ）',type:'number'},
+      {key:'expTv',label:'呼気一回換気量',type:'number'},
+      {key:'expTvAnalyzer',label:'呼気一回換気量（ｱﾅﾗｲｻﾞｰ）',type:'number'},
+      {key:'ieRatio',label:'I:E比',type:'text'},
+      {key:'pipPc',label:'最高気道内圧（PC above PEEP 20cmH2O）',type:'number'},
+      {key:'pipAnalyzer',label:'最高気道内圧（ｱﾅﾗｲｻﾞｰ）',type:'number'},
+      {key:'insTvAnalyzer',label:'吸気一回換気量（ｱﾅﾗｲｻﾞｰ）PC',type:'number'},
+      {key:'peepAnalyzer',label:'PEEP（ｱﾅﾗｲｻﾞｰ）',type:'number'},
+      {key:'o2Analyzer',label:'酸素濃度（ｱﾅﾗｲｻﾞｰ）',type:'number'},
+      {key:'comment',label:'コメント',type:'text'}
+    ]
+  },
+  iabp: {
+    name: 'IABP', icon: '\u2764', idPatterns: ['CE-IB','DE-IB'],
+    sheetName: 'IABP点検', gid: 1723261589, idField: '機器ID', inspectorField: '点検者',
+    categories: ['日常点検','定期点検'],
+    fields: [
+      {key:'cleaning',label:'清掃',type:'check'},
+      {key:'appearance',label:'外観点検',type:'check'},
+      {key:'selfTest',label:'セルフテスト',type:'check'},
+      {key:'accEcg',label:'付属品 心電図ケーブル',type:'check'},
+      {key:'accPlug',label:'付属品 標準プラグケーブル(赤、青)',type:'check'},
+      {key:'accOptical',label:'付属品 光センサ圧出力用ケーブル',type:'check'},
+      {key:'accBpKit',label:'付属品 血圧モニタリングキットケーブル',type:'check'},
+      {key:'accBpRelay',label:'付属品 血圧中継ケーブル',type:'check'},
+      {key:'hePressure',label:'ヘリウムボンベ残圧確認',type:'check'},
+      {key:'heLowDetect',label:'ヘリウム残圧不足検出機能',type:'check'},
+      {key:'electrodeDetect',label:'電極接続不良検出機能',type:'check'},
+      {key:'triggerCheck',label:'トリガーの確認',type:'check'},
+      {key:'pump',label:'ポンプ',type:'check'},
+      {key:'emValve',label:'電磁バルブ',type:'check'},
+      {key:'driveDiaphragm',label:'駆動ダイアフラム',type:'check'},
+      {key:'device',label:'装置',type:'check'},
+      {key:'posStandby',label:'陽圧(スタンバイ時)',type:'number'},
+      {key:'negStandby',label:'陰圧(スタンバイ時)',type:'number'},
+      {key:'ext1',label:'外部1',type:'number'},
+      {key:'ext2',label:'外部2',type:'number'},
+      {key:'int1',label:'内部1',type:'number'},
+      {key:'int2',label:'内部2',type:'number'},
+      {key:'v24',label:'＋24V',type:'number'},
+      {key:'v85',label:'＋8.5V',type:'number'},
+      {key:'v15',label:'＋15V',type:'number'},
+      {key:'v5',label:'＋5V',type:'number'},
+      {key:'v12',label:'＋12V',type:'number'},
+      {key:'v15n',label:'-15V',type:'number'},
+      {key:'balloonRun',label:'バルーン運転',type:'check'},
+      {key:'ecgWave',label:'心電図波形表示',type:'check'},
+      {key:'batteryOp',label:'バッテリー動作',type:'check'},
+      {key:'batteryCharge',label:'バッテリー充電',type:'check'},
+      {key:'totalHours',label:'積算時間',type:'number'},
+      {key:'comment',label:'備考',type:'text'}
+    ]
+  },
+  ecmo: {
+    name: 'ECMO/PCPS', icon: '\uD83E\uDEC0', idPatterns: ['CE-EM','DE-EM'],
+    sheetName: 'ECMO_PCPS点検', gid: 1141402612, idField: '機器ID', inspectorField: '点検者',
+    categories: ['日常点検','定期点検'],
+    fields: [
+      {key:'appearance',label:'外観点検',type:'check'},
+      {key:'batteryCheck',label:'バッテリーチェック',type:'check'},
+      {key:'kocher',label:'コッヘル',type:'check'},
+      {key:'alarm',label:'アラーム',type:'check'},
+      {key:'jelly',label:'ゼリー',type:'check'},
+      {key:'pcpsCircuit',label:'PCPS回路',type:'check'},
+      {key:'cannula',label:'脱血・送血カニューレ',type:'check'},
+      {key:'motorCable',label:'モータユニットケーブルに破損はないか',type:'check'},
+      {key:'bubbleFlowCable',label:'バブル・フローセンサケーブルに破損はないか',type:'check'},
+      {key:'otherCable',label:'その他、ケーブルに破損はないか',type:'check'},
+      {key:'pressureCable',label:'圧力センサケーブル',type:'check'},
+      {key:'spo2Cable',label:'酸素飽和度センサケーブル',type:'check'},
+      {key:'tempCable',label:'温度センサケーブル',type:'check'},
+      {key:'displayDamage',label:'表示画面に破損はないか',type:'check'},
+      {key:'operationPanel',label:'操作パネルは全てのスイッチが異状なく押せるか',type:'check'},
+      {key:'flowKnob',label:'流量設定ツマミはスムーズに回るか',type:'check'},
+      {key:'internalFan',label:'内部ファンの動作音に異音はないか',type:'check'},
+      {key:'signalTower',label:'シグナルタワーに破損はないか',type:'check'},
+      {key:'caster',label:'キャスターはスムーズに回るか',type:'check'},
+      {key:'casterLock',label:'キャスターロックは機能するか',type:'check'},
+      {key:'exterior',label:'装置外装に破損はないか',type:'check'},
+      {key:'driverUnit',label:'遠心ポンプドライバユニット設置時に安定して設置できるか',type:'check'},
+      {key:'mainPole',label:'メインポールはしっかりと固定されているか',type:'check'},
+      {key:'sidePole',label:'サイドポールにぐらつきはないか',type:'check'},
+      {key:'powerCableLock',label:'電源ケーブルは、本体背面にロックされているか',type:'check'},
+      {key:'startSwitch',label:'起動スイッチは正常に動作するか',type:'check'},
+      {key:'indicators',label:'各種表示灯は点灯するか',type:'check'},
+      {key:'cylinderFix',label:'ボンベは固定できるか',type:'check'},
+      {key:'gasOutlet',label:'吹送ガスアウトレットに破損はないか',type:'check'},
+      {key:'inletBlock',label:'インレットブロック（装置背面）に破損はないか',type:'check'},
+      {key:'o2Needle',label:'O2ニードルバルブはスムーズに回るか',type:'check'},
+      {key:'allSwitch',label:'全てのスイッチは正常に動作するか',type:'check'},
+      {key:'allLed',label:'各表示灯・LEDが点灯するか',type:'check'},
+      {key:'flowDisplay',label:'流量表示はされるか',type:'check'},
+      {key:'pressureDisplay',label:'圧力表示はされるか',type:'check'},
+      {key:'spo2Display',label:'酸素飽和度表示はされるか',type:'check'},
+      {key:'tempDisplay',label:'温度表示はされるか',type:'check'},
+      {key:'timer',label:'タイマーは表示・動作するか',type:'check'},
+      {key:'batteryRemain',label:'バッテリ残量は十分か',type:'check'},
+      {key:'clockCheck',label:'時刻表示は正しいか',type:'check'},
+      {key:'batteryRunTime',label:'バッテリ運転の確認（何時間か？）',type:'text'}
+    ]
+  }
+};
+
+let currentInspType = null;
+let currentInspEqId = null;
+
+function switchInspTab(tab) {
+  document.querySelectorAll('.insp-tab').forEach((t,i) => t.classList.toggle('active', (tab==='new'?i===0:i===1)));
+  document.getElementById('inspTabNew').style.display = tab==='new'?'':'none';
+  document.getElementById('inspTabHistory').style.display = tab==='history'?'':'none';
+  if (tab==='history') renderInspHistory();
+}
+
+function initInspectionScreen() {
+  renderInspTypeGrid();
+  populateInspHistTypeFilter();
+}
+
+function renderInspTypeGrid() {
+  const grid = document.getElementById('inspTypeGrid');
+  grid.innerHTML = Object.entries(INSPECTION_TYPES).map(([key, t]) =>
+    `<div class="insp-type-card" onclick="selectInspType('${key}')">
+      <div class="insp-icon">${t.icon}</div>
+      <div class="insp-name">${t.name}</div>
+    </div>`
+  ).join('');
+}
+
+function populateInspHistTypeFilter() {
+  const sel = document.getElementById('inspHistTypeFilter');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">全タイプ</option>' +
+    Object.entries(INSPECTION_TYPES).map(([k,t]) => `<option value="${k}">${t.name}</option>`).join('');
+}
+
+function detectInspType(eqId) {
+  const upper = eqId.toUpperCase();
+  for (const [key, config] of Object.entries(INSPECTION_TYPES)) {
+    if (config.idPatterns.some(p => upper.includes(p.toUpperCase()))) return key;
+  }
+  return null;
+}
+
 function lookupInspEquipment() {
   const id = document.getElementById('inspEqId').value.trim();
-  const eq = allEquipment.find(e => e.id.toUpperCase() === id.toUpperCase());
   const info = document.getElementById('inspEqInfo');
+  if (!id) { info.innerHTML = ''; return; }
+
+  const eq = allEquipment.find(e => e.id.toUpperCase() === id.toUpperCase());
+  const typeKey = detectInspType(id);
 
   if (eq) {
-    info.style.display = 'block';
-    info.innerHTML = `
-      <div style="background:var(--gray-50);border-radius:10px;padding:12px;border-left:4px solid var(--primary)">
-        <div style="font-weight:700">${eq.name}</div>
-        <div style="font-size:13px;color:var(--gray-500)">型式: ${eq.model} | カテゴリ: ${eq.category}</div>
-      </div>
-    `;
-    renderInspCheckItems(eq.category);
-  } else if (id) {
-    info.style.display = 'block';
-    info.innerHTML = '<div style="color:var(--danger);font-size:13px">機器が見つかりません</div>';
+    info.innerHTML = `<div style="background:rgba(255,255,255,.2);border-radius:8px;padding:8px 12px;font-size:13px">
+      <strong>${eq.name}</strong> | ${eq.model || ''} | ${eq.category || ''}
+      ${typeKey ? ' | <span style="font-weight:700">'+INSPECTION_TYPES[typeKey].name+'</span>' : ''}
+    </div>`;
+    if (typeKey) {
+      currentInspType = typeKey;
+      currentInspEqId = id;
+      showInspectionForm(id, typeKey);
+    } else {
+      info.innerHTML += '<div style="color:#fca5a5;font-size:12px;margin-top:4px">この機器IDに対応する点検タイプが見つかりません。下のタイプを選択してください。</div>';
+    }
   } else {
-    info.style.display = 'none';
+    if (typeKey) {
+      info.innerHTML = `<div style="background:rgba(255,255,255,.2);border-radius:8px;padding:8px 12px;font-size:13px">
+        機器マスターに未登録 | <span style="font-weight:700">${INSPECTION_TYPES[typeKey].name}</span>として点検
+      </div>`;
+      currentInspType = typeKey;
+      currentInspEqId = id;
+      showInspectionForm(id, typeKey);
+    } else {
+      info.innerHTML = '<div style="color:#fca5a5;font-size:12px">機器が見つかりません。機器タイプを選択してください。</div>';
+    }
   }
 }
 
-function renderInspCheckItems(category) {
-  const container = document.getElementById('inspCheckItems');
-  let items = [];
+function selectInspType(typeKey) {
+  // Highlight selected card
+  document.querySelectorAll('.insp-type-card').forEach(c => c.classList.remove('selected'));
+  event.currentTarget.classList.add('selected');
 
-  if (category === '輸液ポンプ') {
-    items = ['外観点検','セルフチェック','電源接続動作','チューブクランプ動作','スイッチ操作','気泡検出機能','閉塞圧検出機能','バッテリ点検'];
-  } else if (category === 'シリンジポンプ') {
-    items = ['外観点検','セルフチェック','電源接続動作','動作確認','スイッチ操作','閉塞圧設定確認','閉塞圧検出機能','バッテリ点検'];
-  } else if (category === 'ベッドサイドモニタ') {
-    items = ['外観点検','清掃','心電ケーブル','SPO2センサー','バッテリ'];
-  } else if (category === 'テレメータ') {
-    items = ['外観点検','清掃','心電ケーブル','SPO2センサー','電池'];
-  } else if (category === '人工呼吸器') {
-    items = ['清掃','外観点検','フィルタ清掃','セルフテスト','電源・バッテリテスト','キー動作確認','換気動作','リークテスト','アラーム'];
-  } else if (category === '除細動器') {
-    items = ['清掃','本体及びパドル','スイッチツマミ','心電図誘導ケーブル','記録紙','バッテリ','充電確認'];
-  } else if (category === '電気メス') {
-    items = ['本体キズ・破損','電源コンセント','エアフィルター','接続口・フットスイッチ','電源スイッチランプ','パネル動作確認','フットスイッチ動作確認'];
-  } else {
-    items = ['外観点検','清掃','動作確認','電源確認','バッテリ確認'];
+  // Show equipment list for this type
+  const config = INSPECTION_TYPES[typeKey];
+  const matching = allEquipment.filter(e => {
+    const upper = e.id.toUpperCase();
+    return config.idPatterns.some(p => upper.includes(p.toUpperCase()));
+  });
+
+  if (matching.length === 0) {
+    // No equipment found, just open form with manual ID entry
+    const eqId = document.getElementById('inspEqId').value.trim();
+    if (eqId) {
+      showInspectionForm(eqId, typeKey);
+    } else {
+      showToast(`${config.name}の機器が登録されていません。機器IDを入力してください。`, 'info');
+    }
+    return;
   }
 
-  container.innerHTML = `
-    <div class="form-group">
-      <label class="form-label">点検項目</label>
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-        <input type="checkbox" id="inspAllCheck" onchange="toggleAllInspChecks(this.checked)">
-        <label for="inspAllCheck" style="font-size:13px;font-weight:600">全項目OK</label>
+  const panel = document.getElementById('inspEqListPanel');
+  const body = document.getElementById('inspEqListBody');
+  document.getElementById('inspEqListTitle').textContent = config.name + ' 機器一覧';
+  body.innerHTML = matching.map(e =>
+    `<div class="insp-eq-item" onclick="pickInspEquipment('${e.id}','${typeKey}')">
+      <div class="eq-info">
+        <div class="eq-id">${e.id}</div>
+        <div class="eq-name">${e.name} ${e.model||''}</div>
       </div>
-      ${items.map((item, i) => `
-        <div style="display:flex;align-items:center;gap:8px;padding:4px 0">
-          <input type="checkbox" class="insp-check" id="insp-${i}" name="inspCheck">
-          <label for="insp-${i}" style="font-size:13px">${item}</label>
-        </div>
-      `).join('')}
-    </div>
-  `;
+      <span style="color:var(--gray-400);font-size:18px">&#8250;</span>
+    </div>`
+  ).join('');
+  panel.style.display = '';
+  document.getElementById('inspFormPanel').style.display = 'none';
 }
 
-function toggleAllInspChecks(checked) {
-  document.querySelectorAll('.insp-check').forEach(cb => cb.checked = checked);
+function pickInspEquipment(eqId, typeKey) {
+  document.getElementById('inspEqId').value = eqId;
+  document.getElementById('inspEqListPanel').style.display = 'none';
+  currentInspType = typeKey;
+  currentInspEqId = eqId;
+  showInspectionForm(eqId, typeKey);
+}
+
+function closeInspEqList() {
+  document.getElementById('inspEqListPanel').style.display = 'none';
+}
+
+function closeInspForm() {
+  document.getElementById('inspFormPanel').style.display = 'none';
+  currentInspType = null;
+  currentInspEqId = null;
+}
+
+async function showInspectionForm(equipmentId, typeKey) {
+  const config = INSPECTION_TYPES[typeKey];
+  if (!config) return;
+  currentInspType = typeKey;
+  currentInspEqId = equipmentId;
+
+  const eq = allEquipment.find(e => e.id.toUpperCase() === equipmentId.toUpperCase());
+  const staffList = await dbGetAll('staff');
+  const now = new Date();
+  const dateStr = now.toISOString().slice(0,10);
+  const timeStr = now.toTimeString().slice(0,5);
+
+  // Separate check fields from other fields
+  const checkFields = config.fields.filter(f => f.type === 'check');
+  const otherFields = config.fields.filter(f => f.type !== 'check' && f.type !== 'checkbox_all');
+  const hasBulkCheck = config.fields.some(f => f.type === 'checkbox_all');
+
+  let html = '';
+
+  // Equipment info
+  html += `<div style="background:var(--gray-50);border-radius:10px;padding:12px;margin-bottom:16px;border-left:4px solid var(--primary)">
+    <div style="font-weight:700">${eq ? eq.name : '機器ID: ' + equipmentId}</div>
+    <div style="font-size:13px;color:var(--gray-500)">${eq ? '型式: '+eq.model+' | カテゴリ: '+eq.category : config.name}</div>
+  </div>`;
+
+  // 点検日
+  html += `<div class="form-group">
+    <label class="form-label">点検日</label>
+    <input type="date" class="form-input" id="inspDate" value="${dateStr}">
+  </div>`;
+
+  // 点検区分
+  html += `<div class="form-group">
+    <label class="form-label">点検区分</label>
+    <select class="form-select" id="inspCategory">
+      ${config.categories.map(c => `<option value="${c}">${c}</option>`).join('')}
+    </select>
+  </div>`;
+
+  // Bulk check
+  if (hasBulkCheck) {
+    html += `<div class="insp-bulk-check" onclick="toggleInspBulkCheck()">
+      <span class="bulk-label">&#9989; 一括チェック（全項目OK）</span>
+      <label class="toggle-switch" onclick="event.stopPropagation()">
+        <input type="checkbox" id="inspBulkCheckToggle" onchange="toggleInspBulkCheck()">
+        <span class="toggle-slider"></span>
+      </label>
+    </div>`;
+  }
+
+  // Check fields section
+  if (checkFields.length > 0) {
+    html += `<div class="insp-form-section"><h4>点検項目</h4>`;
+    checkFields.forEach(f => {
+      html += `<div class="insp-check-row">
+        <label>${f.label}</label>
+        <label class="toggle-switch">
+          <input type="checkbox" class="insp-field-check" data-key="${f.key}">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+
+  // Other fields (number, text, select)
+  if (otherFields.length > 0) {
+    html += `<div class="insp-form-section"><h4>測定値・入力項目</h4>`;
+    otherFields.forEach(f => {
+      html += `<div class="form-group" style="margin-bottom:12px">
+        <label class="form-label">${f.label}</label>`;
+      if (f.type === 'number') {
+        html += `<input type="number" class="form-input insp-field-input" data-key="${f.key}" placeholder="${f.unit||''}" step="any">`;
+      } else if (f.type === 'select') {
+        html += `<select class="form-select insp-field-input" data-key="${f.key}">
+          <option value="">選択...</option>
+          ${(f.options||[]).map(o => `<option value="${o}">${o}</option>`).join('')}
+        </select>`;
+      } else {
+        html += `<input type="text" class="form-input insp-field-input" data-key="${f.key}" placeholder="${f.label}">`;
+      }
+      html += `</div>`;
+    });
+    html += `</div>`;
+  }
+
+  // 点検者/登録者
+  const inspectorLabel = config.inspectorField || '点検者';
+  html += `<div class="form-group">
+    <label class="form-label">${inspectorLabel}</label>
+    <select class="form-select" id="inspStaff">
+      <option value="">選択してください</option>
+      ${staffList.map(s => `<option value="${s.staffId}">${s.name} (${s.dept})</option>`).join('')}
+    </select>
+  </div>`;
+
+  // Submit button
+  html += `<button class="btn btn-success btn-lg" onclick="submitInspection()" style="width:100%">&#9989; 点検結果を登録</button>`;
+
+  document.getElementById('inspFormTitle').textContent = config.name + ' 点検';
+  document.getElementById('inspFormBody').innerHTML = html;
+  document.getElementById('inspFormPanel').style.display = '';
+  document.getElementById('inspEqListPanel').style.display = 'none';
+}
+
+function toggleInspBulkCheck() {
+  const toggle = document.getElementById('inspBulkCheckToggle');
+  if (!toggle) return;
+  // If called from the div click, toggle the checkbox
+  if (event && event.currentTarget && !event.currentTarget.classList.contains('toggle-switch')) {
+    toggle.checked = !toggle.checked;
+  }
+  const checked = toggle.checked;
+  document.querySelectorAll('.insp-field-check').forEach(cb => cb.checked = checked);
 }
 
 async function submitInspection() {
-  const eqId = document.getElementById('inspEqId').value.trim();
-  const inspType = document.getElementById('inspType').value;
-  const comment = document.getElementById('inspComment').value;
-  const staff = document.getElementById('inspStaff').value;
+  const eqId = currentInspEqId || document.getElementById('inspEqId').value.trim();
+  const typeKey = currentInspType;
+  if (!eqId) { showToast('機器IDを入力してください','error'); return; }
+  if (!typeKey) { showToast('機器タイプを選択してください','error'); return; }
 
-  if (!eqId) { showToast('機器IDを入力してください', 'error'); return; }
+  const config = INSPECTION_TYPES[typeKey];
+  const date = document.getElementById('inspDate')?.value || new Date().toISOString().slice(0,10);
+  const category = document.getElementById('inspCategory')?.value || '日常点検';
+  const staffEl = document.getElementById('inspStaff');
+  const staffId = staffEl?.value || '';
+  const staffList = await dbGetAll('staff');
+  const staffObj = staffList.find(s => s.staffId === staffId);
+  const staffName = staffObj ? staffObj.name : staffId;
 
-  const checks = {};
-  document.querySelectorAll('.insp-check').forEach((cb, i) => {
-    const label = cb.nextElementSibling ? cb.nextElementSibling.textContent : `check${i}`;
-    checks[label] = cb.checked;
+  if (!staffId) { showToast('点検者を選択してください','error'); return; }
+
+  // Collect all field values
+  const fieldValues = {};
+  const bulkToggle = document.getElementById('inspBulkCheckToggle');
+  const allOk = bulkToggle ? bulkToggle.checked : false;
+  fieldValues['一括チェック'] = allOk ? '全項目OK' : '';
+
+  document.querySelectorAll('.insp-field-check').forEach(cb => {
+    fieldValues[cb.dataset.key] = cb.checked ? 'TRUE' : 'FALSE';
   });
+  document.querySelectorAll('.insp-field-input').forEach(inp => {
+    fieldValues[inp.dataset.key] = inp.value;
+  });
+
+  // Build label-based values for storage and GAS sync
+  const labelValues = {};
+  config.fields.forEach(f => {
+    if (f.type === 'checkbox_all') {
+      labelValues[f.label] = allOk ? '全項目OK' : '';
+    } else if (f.type === 'check') {
+      const cb = document.querySelector(`.insp-field-check[data-key="${f.key}"]`);
+      labelValues[f.label] = cb && cb.checked ? 'TRUE' : 'FALSE';
+    } else {
+      const inp = document.querySelector(`.insp-field-input[data-key="${f.key}"]`);
+      labelValues[f.label] = inp ? inp.value : '';
+    }
+  });
+
+  const eq = allEquipment.find(e => e.id.toUpperCase() === eqId.toUpperCase());
 
   const inspection = {
     inspId: generateId(),
+    equipmentType: typeKey,
+    equipmentTypeName: config.name,
     equipmentId: eqId,
-    date: new Date().toISOString(),
-    type: inspType,
-    checks: checks,
-    allOk: document.getElementById('inspAllCheck') ? document.getElementById('inspAllCheck').checked : false,
-    comment: comment,
-    staffId: staff
+    equipmentName: eq ? eq.name : '',
+    date: date,
+    category: category,
+    inspector: staffName,
+    inspectorId: staffId,
+    allOk: allOk,
+    fieldValues: fieldValues,
+    labelValues: labelValues,
+    createdAt: new Date().toISOString()
   };
 
   await dbPut('inspections', inspection);
-  showToast(`点検結果を登録しました (${eqId})`, 'success');
+  showToast(`${config.name}の点検結果を登録しました (${eqId})`, 'success');
 
-  // Reset form
+  // Try to sync to GAS
+  syncInspectionToGas(inspection, config).catch(err => console.warn('GAS sync failed:', err));
+
+  // Reset
+  closeInspForm();
   document.getElementById('inspEqId').value = '';
-  document.getElementById('inspComment').value = '';
-  document.getElementById('inspEqInfo').style.display = 'none';
-  document.getElementById('inspCheckItems').innerHTML = '';
+  document.getElementById('inspEqInfo').innerHTML = '';
+  document.querySelectorAll('.insp-type-card').forEach(c => c.classList.remove('selected'));
+  currentInspType = null;
+  currentInspEqId = null;
+}
+
+async function syncInspectionToGas(inspection, config) {
+  const gasUrl = localStorage.getItem('GAS_URL');
+  if (!gasUrl) return;
+
+  const row = {
+    '点検日': inspection.date,
+    '点検区分': inspection.category
+  };
+  row[config.idField] = inspection.equipmentId;
+
+  // Map field labels to values
+  config.fields.forEach(f => {
+    row[f.label] = inspection.labelValues[f.label] || '';
+  });
+  row[config.inspectorField] = inspection.inspector;
+
+  try {
+    await fetch(gasUrl, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        action: 'addTypedInspection',
+        sheetName: config.sheetName,
+        data: row
+      })
+    });
+  } catch(e) { console.warn('Inspection GAS sync error:', e); }
+}
+
+// ===== Inspection History =====
+async function renderInspHistory() {
+  const inspections = await dbGetAll('inspections');
+  allInspections = inspections.sort((a,b) => (b.createdAt||b.date||'').localeCompare(a.createdAt||a.date||''));
+  filterInspHistory();
+}
+
+let allInspections = [];
+
+function filterInspHistory() {
+  const search = (document.getElementById('inspHistSearch')?.value||'').trim().toLowerCase();
+  const typeFilter = document.getElementById('inspHistTypeFilter')?.value || '';
+  const dateFrom = document.getElementById('inspHistDateFrom')?.value || '';
+  const dateTo = document.getElementById('inspHistDateTo')?.value || '';
+
+  let filtered = allInspections;
+  if (search) filtered = filtered.filter(i => (i.equipmentId||'').toLowerCase().includes(search));
+  if (typeFilter) filtered = filtered.filter(i => i.equipmentType === typeFilter);
+  if (dateFrom) filtered = filtered.filter(i => (i.date||'') >= dateFrom);
+  if (dateTo) filtered = filtered.filter(i => (i.date||'') <= dateTo);
+
+  const container = document.getElementById('inspHistoryList');
+  if (filtered.length === 0) {
+    container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--gray-400)">点検履歴がありません</div>';
+    return;
+  }
+
+  container.innerHTML = filtered.slice(0,100).map(insp => {
+    const typeName = insp.equipmentTypeName || (INSPECTION_TYPES[insp.equipmentType]?.name) || insp.type || '不明';
+    const icon = INSPECTION_TYPES[insp.equipmentType]?.icon || '\u2705';
+    return `<div class="insp-history-item" onclick="showInspDetail('${insp.inspId}')">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div>
+          <span style="font-size:18px;margin-right:6px">${icon}</span>
+          <strong style="color:var(--primary)">${insp.equipmentId}</strong>
+          <span style="margin-left:8px;font-size:13px;color:var(--gray-500)">${typeName}</span>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:13px;font-weight:600">${insp.date||''}</div>
+          <div style="font-size:12px;color:var(--gray-400)">${insp.inspector||insp.staffId||''}</div>
+        </div>
+      </div>
+      <div style="margin-top:4px;font-size:12px;color:var(--gray-500)">
+        ${insp.category||''} ${insp.allOk?'<span style="color:var(--success);font-weight:600">全項目OK</span>':''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function showInspDetail(inspId) {
+  const insp = allInspections.find(i => i.inspId === inspId);
+  if (!insp) return;
+
+  const config = INSPECTION_TYPES[insp.equipmentType];
+  const typeName = insp.equipmentTypeName || config?.name || '不明';
+
+  document.getElementById('modalTitle').textContent = typeName + ' 点検詳細';
+
+  let html = `<div class="detail-grid">
+    <div class="detail-item"><div class="label">機器ID</div><div class="value">${insp.equipmentId}</div></div>
+    <div class="detail-item"><div class="label">機器名</div><div class="value">${insp.equipmentName||'-'}</div></div>
+    <div class="detail-item"><div class="label">点検日</div><div class="value">${insp.date||''}</div></div>
+    <div class="detail-item"><div class="label">点検区分</div><div class="value">${insp.category||''}</div></div>
+    <div class="detail-item"><div class="label">点検者</div><div class="value">${insp.inspector||''}</div></div>
+    <div class="detail-item"><div class="label">全項目OK</div><div class="value">${insp.allOk?'はい':'いいえ'}</div></div>
+  </div>`;
+
+  if (insp.labelValues && config) {
+    html += '<div style="margin-top:16px"><h4 style="font-size:14px;margin-bottom:8px">点検項目</h4>';
+    config.fields.forEach(f => {
+      if (f.type === 'checkbox_all') return;
+      const val = insp.labelValues[f.label] || '';
+      const isCheck = f.type === 'check';
+      let displayVal = val;
+      if (isCheck) {
+        displayVal = val === 'TRUE' ? '<span style="color:var(--success);font-weight:700">OK</span>' : '<span style="color:var(--gray-400)">-</span>';
+      }
+      html += `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--gray-100);font-size:13px">
+        <span>${f.label}</span><span>${displayVal}</span>
+      </div>`;
+    });
+    html += '</div>';
+  } else if (insp.checks) {
+    html += '<div style="margin-top:16px"><h4 style="font-size:14px;margin-bottom:8px">点検項目</h4>';
+    Object.entries(insp.checks).forEach(([k,v]) => {
+      html += `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--gray-100);font-size:13px">
+        <span>${k}</span><span>${v?'<span style="color:var(--success)">OK</span>':'-'}</span>
+      </div>`;
+    });
+    html += '</div>';
+  }
+
+  document.getElementById('modalBody').innerHTML = html;
+  document.getElementById('modalFooter').innerHTML = '<button class="btn btn-outline" onclick="closeModal()">閉じる</button>';
+  openModal();
+}
+
+async function populateStaffDropdown() {
+  // This is now handled dynamically in showInspectionForm
+  // Keep for backward compatibility
 }
 
 // ===================== REPAIR =====================
@@ -4126,12 +5060,28 @@ function startQrScan(target) {
     return;
   }
 
-  qrScanner = new Html5Qrcode('qrReader');
+  // QR + バーコード全般（GS1-128, CODE128, EAN, DataMatrix等）に対応
+  const supportedFormats = [
+    Html5QrcodeSupportedFormats.QR_CODE,
+    Html5QrcodeSupportedFormats.CODE_128,       // GS1-128 (CODE128ベース)
+    Html5QrcodeSupportedFormats.CODE_39,
+    Html5QrcodeSupportedFormats.CODE_93,
+    Html5QrcodeSupportedFormats.EAN_13,          // JANコード (13桁)
+    Html5QrcodeSupportedFormats.EAN_8,           // JANコード (8桁)
+    Html5QrcodeSupportedFormats.UPC_A,
+    Html5QrcodeSupportedFormats.UPC_E,
+    Html5QrcodeSupportedFormats.ITF,             // ITF (医薬品等)
+    Html5QrcodeSupportedFormats.DATA_MATRIX,     // GS1データマトリックス
+    Html5QrcodeSupportedFormats.AZTEC,
+    Html5QrcodeSupportedFormats.PDF_417,
+    Html5QrcodeSupportedFormats.CODABAR
+  ];
+  qrScanner = new Html5Qrcode('qrReader', { formatsToSupport: supportedFormats });
   let lastScannedCode = '';
   let lastScannedTime = 0;
   qrScanner.start(
     { facingMode: 'environment' },
-    { fps: 10, qrbox: { width: 250, height: 250 } },
+    { fps: 15, qrbox: { width: 300, height: 200 } },
     (text) => {
       // 連続モード: 同じコードの連続読み取りを防止（2秒間）
       const now = Date.now();
@@ -4164,6 +5114,9 @@ function onQrScanned(text) {
   } else if (qrTarget === 'inspection') {
     document.getElementById('inspEqId').value = cleanedText;
     lookupInspEquipment();
+  } else if (qrTarget === 'order') {
+    document.getElementById('orderScanInput').value = cleanedText;
+    processOrderScan();
   }
 }
 
@@ -5613,6 +6566,345 @@ async function renderStockTable() {
 function quickInvAction(type, itemId) {
   const item = allItems.find(it => it.itemId === itemId);
   if (item) showInventoryModal(type, item);
+}
+
+// ===================== ORDERS (発注管理) =====================
+let allOrders = [];
+let filteredOrders = [];
+let editingOrderId = null;
+
+async function initOrders() {
+  document.getElementById('orderDate').value = new Date().toISOString().split('T')[0];
+  document.getElementById('orderPrintDate').value = new Date().toISOString().split('T')[0];
+  allOrders = await dbGetAll('orders');
+  setOrderTab('register');
+}
+
+function setOrderTab(tab) {
+  const tabs = ['register','list','print'];
+  tabs.forEach(t => {
+    document.getElementById('orderSection' + t.charAt(0).toUpperCase() + t.slice(1)).style.display = t === tab ? '' : 'none';
+    const btn = document.getElementById('orderTab' + t.charAt(0).toUpperCase() + t.slice(1));
+    btn.style.background = t === tab ? 'var(--primary)' : '#fff';
+    btn.style.color = t === tab ? '#fff' : 'var(--gray-600)';
+    btn.style.fontWeight = t === tab ? '600' : '400';
+  });
+  if (tab === 'list') { filterOrders(); renderOrderList(); }
+  if (tab === 'print') { updateOrderPrintPreview(); }
+}
+
+function processOrderScan() {
+  const raw = document.getElementById('orderScanInput').value.trim();
+  if (!raw) return;
+  const janCode = parseGS1ToJAN(raw);
+  const statusEl = document.getElementById('orderScanStatus');
+
+  const item = allItems.find(it => it.janCode === janCode || it.itemId === raw || it.scanCode === raw);
+  if (item) {
+    document.getElementById('orderJanCode').value = item.janCode || '';
+    document.getElementById('orderProductName').value = item.productName || '';
+    document.getElementById('orderUnitPrice').value = item.unitPrice || '';
+    document.getElementById('orderUnit').value = item.orderUnit || '';
+    const infoEl = document.getElementById('orderItemInfo');
+    infoEl.style.display = '';
+    document.getElementById('orderItemInfoContent').innerHTML =
+      `<span>${item.productName || ''}</span> <span style="color:var(--gray-500);font-weight:400;font-size:12px">| ${item.spec || ''} | ¥${Number(item.unitPrice||0).toLocaleString()} | ${item.orderUnit || ''}</span>`;
+    statusEl.textContent = '✓ 商品が見つかりました: ' + (item.productName || '');
+  } else {
+    document.getElementById('orderJanCode').value = janCode;
+    document.getElementById('orderProductName').value = '';
+    document.getElementById('orderUnitPrice').value = '';
+    document.getElementById('orderUnit').value = '';
+    document.getElementById('orderItemInfo').style.display = 'none';
+    statusEl.textContent = '⚠ 該当する商品が見つかりません (JAN: ' + janCode + ')';
+  }
+  document.getElementById('orderScanInput').value = '';
+}
+
+function adjustOrderQty(delta) {
+  const el = document.getElementById('orderQty');
+  el.value = Math.max(1, parseInt(el.value || '1') + delta);
+}
+
+function resetOrderForm() {
+  editingOrderId = null;
+  document.getElementById('orderScanInput').value = '';
+  document.getElementById('orderDate').value = new Date().toISOString().split('T')[0];
+  document.getElementById('orderJanCode').value = '';
+  document.getElementById('orderProductName').value = '';
+  document.getElementById('orderUnitPrice').value = '';
+  document.getElementById('orderQty').value = '1';
+  document.getElementById('orderUnit').value = '';
+  document.getElementById('orderStatus').value = '未発注';
+  document.getElementById('orderRemarks').value = '';
+  document.getElementById('orderItemInfo').style.display = 'none';
+  document.getElementById('orderScanStatus').textContent = '';
+}
+
+async function submitOrder() {
+  const janCode = document.getElementById('orderJanCode').value.trim();
+  const date = document.getElementById('orderDate').value;
+  const qty = parseInt(document.getElementById('orderQty').value) || 1;
+  const status = document.getElementById('orderStatus').value;
+  const remarks = document.getElementById('orderRemarks').value.trim();
+
+  if (!janCode) { showToast('JANコードを入力してください', 'error'); return; }
+  if (!date) { showToast('発注日を入力してください', 'error'); return; }
+
+  const item = allItems.find(it => it.janCode === janCode);
+  const order = {
+    orderId: editingOrderId || generateId(),
+    date,
+    scanCode: item ? (item.scanCode || '') : '',
+    janCode,
+    quantity: String(qty),
+    status,
+    remarks,
+    productName: item ? (item.productName || '') : document.getElementById('orderProductName').value,
+    unitPrice: item ? (item.unitPrice || '') : document.getElementById('orderUnitPrice').value,
+    orderUnit: item ? (item.orderUnit || '') : document.getElementById('orderUnit').value
+  };
+
+  await dbPut('orders', order);
+  allOrders = await dbGetAll('orders');
+
+  // Sync to Sheets
+  if (syncEnabled) {
+    try { await gasPost('saveOrder', { data: order }); } catch(e) { queueSync('saveOrder', { data: order }); }
+  }
+
+  showToast(editingOrderId ? '発注を更新しました' : '発注を登録しました', 'success');
+  resetOrderForm();
+}
+
+function filterOrders() {
+  const search = (document.getElementById('orderSearch').value || '').toLowerCase();
+  const statusF = document.getElementById('orderStatusFilter').value;
+  const dateFrom = document.getElementById('orderDateFrom').value;
+  const dateTo = document.getElementById('orderDateTo').value;
+
+  filteredOrders = allOrders.filter(o => {
+    if (statusF && o.status !== statusF) return false;
+    if (dateFrom && o.date < dateFrom) return false;
+    if (dateTo && o.date > dateTo) return false;
+    if (search) {
+      const item = allItems.find(it => it.janCode === o.janCode);
+      const name = (item ? item.productName : o.productName) || '';
+      if (!name.toLowerCase().includes(search) && !(o.janCode || '').toLowerCase().includes(search)) return false;
+    }
+    return true;
+  }).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  renderOrderList();
+}
+
+function renderOrderList() {
+  const tbody = document.getElementById('orderListBody');
+  if (!filteredOrders.length) {
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:40px;color:var(--gray-400)">発注データがありません</td></tr>';
+    return;
+  }
+  tbody.innerHTML = filteredOrders.map(o => {
+    const item = allItems.find(it => it.janCode === o.janCode);
+    const name = (item ? item.productName : o.productName) || '-';
+    const price = Number(item ? item.unitPrice : o.unitPrice) || 0;
+    const unit = (item ? item.orderUnit : o.orderUnit) || '';
+    const qty = Number(o.quantity) || 0;
+    const amount = price * qty;
+    const statusBadge = o.status === '未発注' ? '<span class="badge" style="background:#fef3c7;color:#92400e">未発注</span>'
+      : o.status === '発注済み' ? '<span class="badge" style="background:#dbeafe;color:#1e40af">発注済み</span>'
+      : '<span class="badge" style="background:#d1fae5;color:#065f46">入荷済み</span>';
+    return `<tr>
+      <td><input type="checkbox" class="order-check" value="${o.orderId}"></td>
+      <td>${o.date || ''}</td><td style="font-size:12px">${o.janCode || ''}</td><td>${name}</td>
+      <td>${qty}</td><td>${unit}</td><td>¥${amount.toLocaleString()}</td>
+      <td>${statusBadge}</td><td style="font-size:12px;max-width:120px;overflow:hidden;text-overflow:ellipsis">${o.remarks || ''}</td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-sm btn-outline" onclick="editOrder('${o.orderId}')">編集</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteOrder('${o.orderId}')">削除</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function toggleOrderSelectAll() {
+  const checked = document.getElementById('orderSelectAll').checked || document.getElementById('orderSelectAllHead').checked;
+  document.querySelectorAll('.order-check').forEach(cb => cb.checked = checked);
+  document.getElementById('orderSelectAll').checked = checked;
+  document.getElementById('orderSelectAllHead').checked = checked;
+}
+
+async function bulkUpdateStatus() {
+  const selected = [...document.querySelectorAll('.order-check:checked')].map(cb => cb.value);
+  if (!selected.length) { showToast('発注を選択してください', 'error'); return; }
+  const newStatus = document.getElementById('orderBulkStatus').value;
+  for (const orderId of selected) {
+    const order = allOrders.find(o => o.orderId === orderId);
+    if (order) {
+      order.status = newStatus;
+      await dbPut('orders', order);
+      if (syncEnabled) {
+        try { await gasPost('saveOrder', { data: order }); } catch(e) { queueSync('saveOrder', { data: order }); }
+      }
+    }
+  }
+  allOrders = await dbGetAll('orders');
+  filterOrders();
+  showToast(`${selected.length}件のステータスを「${newStatus}」に変更しました`, 'success');
+}
+
+async function editOrder(orderId) {
+  const order = allOrders.find(o => o.orderId === orderId);
+  if (!order) return;
+  editingOrderId = orderId;
+  setOrderTab('register');
+  document.getElementById('orderDate').value = order.date || '';
+  document.getElementById('orderJanCode').value = order.janCode || '';
+  document.getElementById('orderQty').value = order.quantity || '1';
+  document.getElementById('orderStatus').value = order.status || '未発注';
+  document.getElementById('orderRemarks').value = order.remarks || '';
+
+  const item = allItems.find(it => it.janCode === order.janCode);
+  document.getElementById('orderProductName').value = item ? (item.productName || '') : (order.productName || '');
+  document.getElementById('orderUnitPrice').value = item ? (item.unitPrice || '') : (order.unitPrice || '');
+  document.getElementById('orderUnit').value = item ? (item.orderUnit || '') : (order.orderUnit || '');
+
+  if (item) {
+    document.getElementById('orderItemInfo').style.display = '';
+    document.getElementById('orderItemInfoContent').innerHTML =
+      `<span>${item.productName || ''}</span> <span style="color:var(--gray-500);font-weight:400;font-size:12px">| ${item.spec || ''} | ¥${Number(item.unitPrice||0).toLocaleString()} | ${item.orderUnit || ''}</span>`;
+  }
+  showToast('発注データを編集中です', 'info');
+}
+
+async function deleteOrder(orderId) {
+  if (!confirm('この発注を削除しますか？')) return;
+  const tx = db.transaction('orders', 'readwrite');
+  tx.objectStore('orders').delete(orderId);
+  await new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = rej; });
+  if (syncEnabled) {
+    try { await gasPost('deleteOrder', { id: orderId }); } catch(e) { console.warn('Delete order from Sheets failed:', e); }
+  }
+  allOrders = await dbGetAll('orders');
+  filterOrders();
+  showToast('発注を削除しました', 'success');
+}
+
+async function updateOrderStatus(orderId, newStatus) {
+  const order = allOrders.find(o => o.orderId === orderId);
+  if (!order) return;
+  order.status = newStatus;
+  await dbPut('orders', order);
+  if (syncEnabled) {
+    try { await gasPost('saveOrder', { data: order }); } catch(e) { queueSync('saveOrder', { data: order }); }
+  }
+  allOrders = await dbGetAll('orders');
+  filterOrders();
+}
+
+function updateOrderPrintPreview() {
+  const targetDate = document.getElementById('orderPrintDate').value;
+  const previewEl = document.getElementById('orderPrintPreview');
+  if (!targetDate) {
+    previewEl.innerHTML = '<p style="color:var(--gray-400);text-align:center;margin-top:60px">日付を選択すると発注書のプレビューが表示されます</p>';
+    return;
+  }
+  const orders = allOrders.filter(o => o.date === targetDate && o.status === '未発注');
+  if (!orders.length) {
+    previewEl.innerHTML = '<p style="color:var(--gray-400);text-align:center;margin-top:60px">該当日の未発注データがありません</p>';
+    return;
+  }
+  const dateParts = targetDate.split('-');
+  const dateStr = `${dateParts[0]}年${parseInt(dateParts[1])}月${parseInt(dateParts[2])}日`;
+  let total = 0;
+  const rows = orders.map((o, i) => {
+    const item = allItems.find(it => it.janCode === o.janCode);
+    const name = (item ? item.productName : o.productName) || '-';
+    const price = Number(item ? item.unitPrice : o.unitPrice) || 0;
+    const unit = (item ? item.orderUnit : o.orderUnit) || '';
+    const qty = Number(o.quantity) || 0;
+    const amount = price * qty;
+    total += amount;
+    return `<tr><td style="text-align:center">${i+1}</td><td>${name}</td><td style="text-align:right">¥${price.toLocaleString()}</td><td style="text-align:center">${qty}</td><td style="text-align:center">${unit}</td><td style="text-align:right">¥${amount.toLocaleString()}</td><td>${o.remarks || ''}</td></tr>`;
+  }).join('');
+  previewEl.innerHTML = `
+    <div style="text-align:center;margin-bottom:16px"><h2 style="letter-spacing:8px;font-size:22px">発　注　書</h2></div>
+    <div style="display:flex;justify-content:space-between;margin-bottom:16px;font-size:14px">
+      <div>発注日: ${dateStr}<br>依頼部署: ME室</div>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead><tr style="background:var(--gray-100)">
+        <th style="border:1px solid var(--gray-300);padding:8px;width:40px">No.</th>
+        <th style="border:1px solid var(--gray-300);padding:8px">商品名</th>
+        <th style="border:1px solid var(--gray-300);padding:8px;width:80px">単価</th>
+        <th style="border:1px solid var(--gray-300);padding:8px;width:60px">数量</th>
+        <th style="border:1px solid var(--gray-300);padding:8px;width:60px">単位</th>
+        <th style="border:1px solid var(--gray-300);padding:8px;width:90px">金額</th>
+        <th style="border:1px solid var(--gray-300);padding:8px">備考</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot><tr style="font-weight:700;background:var(--gray-50)">
+        <td colspan="5" style="border:1px solid var(--gray-300);padding:8px;text-align:right">合計</td>
+        <td style="border:1px solid var(--gray-300);padding:8px;text-align:right">¥${total.toLocaleString()}</td>
+        <td style="border:1px solid var(--gray-300);padding:8px"></td>
+      </tr></tfoot>
+    </table>`;
+}
+
+function generateOrderPDF() {
+  const targetDate = document.getElementById('orderPrintDate').value;
+  if (!targetDate) { showToast('日付を選択してください', 'error'); return; }
+  const orders = allOrders.filter(o => o.date === targetDate && o.status === '未発注');
+  if (!orders.length) { showToast('該当日の未発注データがありません', 'error'); return; }
+
+  const dateParts = targetDate.split('-');
+  const dateStr = `${dateParts[0]}年${parseInt(dateParts[1])}月${parseInt(dateParts[2])}日`;
+  let total = 0;
+  const rows = orders.map((o, i) => {
+    const item = allItems.find(it => it.janCode === o.janCode);
+    const name = (item ? item.productName : o.productName) || '-';
+    const price = Number(item ? item.unitPrice : o.unitPrice) || 0;
+    const unit = (item ? item.orderUnit : o.orderUnit) || '';
+    const qty = Number(o.quantity) || 0;
+    const amount = price * qty;
+    total += amount;
+    return `<tr><td style="text-align:center;border:1px solid #333;padding:6px 8px">${i+1}</td><td style="border:1px solid #333;padding:6px 8px">${name}</td><td style="text-align:right;border:1px solid #333;padding:6px 8px">¥${price.toLocaleString()}</td><td style="text-align:center;border:1px solid #333;padding:6px 8px">${qty}</td><td style="text-align:center;border:1px solid #333;padding:6px 8px">${unit}</td><td style="text-align:right;border:1px solid #333;padding:6px 8px">¥${amount.toLocaleString()}</td><td style="border:1px solid #333;padding:6px 8px">${o.remarks || ''}</td></tr>`;
+  }).join('');
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>発注書 - ${dateStr}</title>
+<style>
+@page { size: A4 landscape; margin: 15mm; }
+body { font-family: 'Meiryo','Hiragino Sans',sans-serif; color: #111; margin: 0; padding: 20px; }
+h1 { text-align: center; letter-spacing: 12px; font-size: 26px; margin-bottom: 24px; }
+.info { margin-bottom: 20px; font-size: 14px; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { background: #eee; border: 1px solid #333; padding: 8px; font-weight: 700; }
+.total-row { font-weight: 700; background: #f5f5f5; }
+.total-row td { border: 1px solid #333; padding: 8px; }
+@media print { body { padding: 0; } }
+</style></head><body>
+<h1>発　注　書</h1>
+<div class="info">
+  <div>発注日: ${dateStr}</div>
+  <div>依頼部署: ME室</div>
+</div>
+<table>
+  <thead><tr><th style="width:40px">No.</th><th>商品名</th><th style="width:80px">単価</th><th style="width:60px">数量</th><th style="width:60px">単位</th><th style="width:90px">金額</th><th>備考</th></tr></thead>
+  <tbody>${rows}</tbody>
+  <tfoot><tr class="total-row"><td colspan="5" style="text-align:right">合計</td><td style="text-align:right">¥${total.toLocaleString()}</td><td></td></tr></tfoot>
+</table>
+<script>window.onload=function(){window.print();}<\/script>
+</body></html>`;
+
+  const w = window.open('', '_blank');
+  w.document.write(html);
+  w.document.close();
+}
+
+// Push order to Sheets helper
+async function pushOrderToSheets(orderData) {
+  if (!syncEnabled) return;
+  try { await gasPost('saveOrder', { data: orderData }); }
+  catch(e) { queueSync('saveOrder', { data: orderData }); }
 }
 
 // ===================== KEYBOARD SHORTCUTS =====================
