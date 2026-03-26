@@ -778,6 +778,7 @@ a{color:var(--primary);text-decoration:none}
     <div class="modal-body">
       <div id="qrReader" class="qr-scanner-area"></div>
       <p style="text-align:center;margin-top:12px;color:var(--gray-500);font-size:13px">QRコードをカメラに向けてください</p>
+      <div id="qrContinuousStatus" style="display:none;text-align:center;margin-top:8px;padding:8px;background:#065f46;color:#6ee7b7;border-radius:8px;font-size:13px;font-weight:600"></div>
     </div>
   </div>
 </div>
@@ -785,8 +786,15 @@ a{color:var(--primary);text-decoration:none}
 <!-- Toast Container -->
 <div class="toast-container" id="toastContainer"></div>
 
-<!-- External Libraries -->
-<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<!-- External Libraries: QR Scanner (ローカル優先、CDNフォールバック) -->
+<script src="html5-qrcode.min.js"></script>
+<script>
+if (typeof Html5Qrcode === 'undefined') {
+  var s = document.createElement('script');
+  s.src = 'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js';
+  document.head.appendChild(s);
+}
+</script>
 <script src="items-data.js"></script>
 
 <!-- Data File (inline) -->
@@ -2920,6 +2928,12 @@ async function executeLendingDirect(eq, area) {
   renderAreaGrid();
   renderRecentActivity();
   showToast(`✓ ${eq.name} (${eq.id}) → ${area}【${continuousSessionCount}台目】`, 'success');
+  // QRカメラ連続モード用ステータス更新
+  const qrStatus = document.getElementById('qrContinuousStatus');
+  if (qrStatus) {
+    qrStatus.style.display = 'block';
+    qrStatus.textContent = `✓ ${eq.name} (${eq.id}) → ${area}【${continuousSessionCount}台目】次のQRをスキャンしてください`;
+  }
   document.getElementById('barcodeInput').focus();
 }
 
@@ -4113,12 +4127,25 @@ function startQrScan(target) {
   }
 
   qrScanner = new Html5Qrcode('qrReader');
+  let lastScannedCode = '';
+  let lastScannedTime = 0;
   qrScanner.start(
     { facingMode: 'environment' },
     { fps: 10, qrbox: { width: 250, height: 250 } },
     (text) => {
+      // 連続モード: 同じコードの連続読み取りを防止（2秒間）
+      const now = Date.now();
+      if (text === lastScannedCode && now - lastScannedTime < 2000) return;
+      lastScannedCode = text;
+      lastScannedTime = now;
+
       onQrScanned(text);
-      closeQrScanner();
+      // 連続モード＋貸出時はカメラを閉じない
+      if (continuousMode && selectedArea && qrTarget === 'lending') {
+        // カメラは開いたまま、次のスキャンを待つ
+      } else {
+        closeQrScanner();
+      }
     },
     () => {}
   ).catch(err => {
@@ -4128,17 +4155,18 @@ function startQrScan(target) {
 }
 
 function onQrScanned(text) {
-  if (qrTarget === 'lending') {
-    document.getElementById('barcodeInput').value = text;
+  const cleanedText = cleanScannedId(text);
+  console.log('[QR Scan] raw:', text, '→ cleaned:', cleanedText);
+
+  if (qrTarget === 'lending' || qrTarget === 'return') {
+    document.getElementById('barcodeInput').value = cleanedText;
     processBarcode();
-  } else if (qrTarget === 'return') {
-    document.getElementById('barcodeInput').value = text;
-    processReturn();
   } else if (qrTarget === 'inspection') {
-    document.getElementById('inspEqId').value = text;
+    document.getElementById('inspEqId').value = cleanedText;
     lookupInspEquipment();
   }
 }
+
 
 function closeQrScanner() {
   if (qrScanner) {

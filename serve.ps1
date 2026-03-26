@@ -1,5 +1,5 @@
 $port = 8080
-$root = Split-Path -Parent $MyInvocation.MyCommand.Path
+$root = "C:\Users\STH-ME001D\Desktop\ME機器管理システム_App"
 
 $mimeTypes = @{
     '.html' = 'text/html; charset=utf-8'
@@ -10,14 +10,23 @@ $mimeTypes = @{
     '.jpg'  = 'image/jpeg'
     '.ico'  = 'image/x-icon'
     '.svg'  = 'image/svg+xml'
+    '.woff' = 'font/woff'
+    '.woff2'= 'font/woff2'
 }
 
-$listener = New-Object System.Net.HttpListener
-$listener.Prefixes.Add("http://localhost:${port}/")
-$listener.Start()
+try {
+    $listener = New-Object System.Net.HttpListener
+    $listener.Prefixes.Add("http://+:$port/")
+    $listener.Start()
+} catch {
+    $listener = New-Object System.Net.HttpListener
+    $listener.Prefixes.Add("http://localhost:$port/")
+    $listener.Start()
+}
 
-# Flush startup message so the preview tool detects it
-[Console]::Out.WriteLine("Server running at http://localhost:${port}/")
+[Console]::Out.Flush()
+Write-Host "Server running at http://localhost:$port/" -NoNewline
+Write-Host ""
 [Console]::Out.Flush()
 
 while ($listener.IsListening) {
@@ -44,6 +53,6 @@ while ($listener.IsListening) {
         }
         $context.Response.Close()
     } catch {
-        [Console]::Error.WriteLine("Error: $_")
+        Write-Host "Error: $_"
     }
 }
