@@ -5613,13 +5613,13 @@ function startQrScan(target) {
     startQrMode();
   }
 
-  // Gemini AIフォールバック: 5秒読めなければ
+  // Gemini AIフォールバック: 10秒読めなければ（ピント合わせ時間を確保）
   _aiTimer = setTimeout(() => {
     if (_scanActive) {
       if (getGeminiKey()) tryGeminiOCR();
       else showGeminiKeyPrompt();
     }
-  }, 5000);
+  }, 10000);
 }
 
 // ── バーコードモード: Quagga2 LiveStream ──
@@ -5760,21 +5760,27 @@ function startQrMode() {
 
   _html5QrScanner = new Html5Qrcode('html5QrReader');
 
+  // ── ユーザー指定の最適設定 ──
+  // ・fps: 15（欲張らずピント合わせ優先）
+  // ・qrbox: 画面の70%（QRが入りやすい）
+  // ・解像度はスマホの標準に任せる（facingModeのみ指定でピントが合う）
+  // ・QRコード最優先、次にCODE128(GS1)
   const config = {
     fps: 15,
-    qrbox: { width: 280, height: 280 },
+    qrbox: (viewfinderWidth, viewfinderHeight) => {
+      const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+      return { width: Math.floor(minEdge * 0.7), height: Math.floor(minEdge * 0.7) };
+    },
     formatsToSupport: [
       Html5QrcodeSupportedFormats.QR_CODE,
-      Html5QrcodeSupportedFormats.CODE_128,
-      Html5QrcodeSupportedFormats.EAN_13
+      Html5QrcodeSupportedFormats.CODE_128
     ],
-    aspectRatio: 1.0,
     disableFlip: false,
     experimentalFeatures: { useBarCodeDetectorIfSupported: true }
   };
 
   _html5QrScanner.start(
-    { facingMode: 'environment' },
+    { facingMode: 'environment' },  // 解像度はスマホの標準に任せる（ピント最適化）
     config,
     // ─── 読取成功コールバック ───
     (decodedText, decodedResult) => {
@@ -5782,50 +5788,31 @@ function startQrMode() {
       const fmt = decodedResult?.result?.format?.formatName || '';
       console.log('[html5-qrcode] detected:', decodedText, 'format:', fmt);
 
-      // ── GS1-128 / バーコード判定: 既存ロジック (parseGS1ToJAN) をそのまま使う ──
+      // ── GS1-128判定: 既存の parseGS1ToJAN をそのまま呼ぶ ──
       let finalValue = decodedText;
-      const isGS1 = decodedText.startsWith(']C1') || /^\(01\)/.test(decodedText) || (/^01\d{14}/.test(decodedText) && decodedText.length > 20);
-
-      if (isGS1) {
-        // GS1-128 → JAN 抽出 (既存関数をそのまま呼ぶ)
-        const jan = parseGS1ToJAN(decodedText);
-        finalValue = jan || decodedText;
+      if (decodedText.includes(']C1')) {
+        finalValue = parseGS1ToJAN(decodedText) || decodedText;
         console.log('[html5-qrcode] GS1 → JAN:', finalValue);
       }
       // QRコード (URL含む): そのまま通す → cleanScannedId が後段で処理
 
-      // 成功表示
-      const resultEl = document.getElementById('qrScanResult');
-      if (resultEl) {
-        resultEl.style.display = 'block';
-        resultEl.style.background = '#d1fae5';
-        resultEl.style.color = '#065f46';
-        if (isGS1) {
-          resultEl.innerHTML = `&#9989; GS1-128 → JAN: <strong>${finalValue}</strong>`;
-        } else {
-          resultEl.innerHTML = `&#9989; ${fmt.includes('QR') ? 'QR' : fmt || '読取'}: <strong>${finalValue.length > 50 ? finalValue.substring(0,50)+'...' : finalValue}</strong>`;
-        }
-      }
-
-      // 一時停止 → 結果処理 → 必要に応じて再開
+      // 一時停止（二重検出防止）
       try { _html5QrScanner.pause(true); } catch(e) {}
 
-      // バイブレーション
-      if (navigator.vibrate) navigator.vibrate(100);
+      // 成功表示（緑枠）
+      const qrArea = document.getElementById('scanQrArea');
+      if (qrArea) qrArea.style.border = '5px solid #059669';
 
-      // AI タイマー解除
-      if (_aiTimer) { clearTimeout(_aiTimer); _aiTimer = null; }
-
-      // ── 結果をシステムへ渡す ──
+      // ── handleScanResult に任せる（スキャナ停止→コールバック実行の順序制御はそちらで） ──
       handleScanResult(finalValue);
 
-      // 連続モードなら再開
+      // 連続モード: 2秒後に再開
       if (continuousMode && selectedArea && qrTarget === 'lending') {
         setTimeout(() => {
+          if (qrArea) qrArea.style.border = 'none';
           try { if (_html5QrScanner && _scanActive) _html5QrScanner.resume(); } catch(e) {}
-        }, 1500);
+        }, 2000);
       }
-      // 非連続モードは handleScanResult → closeQrScanner で停止
     },
     // ─── 走査中 (読めてない間) ───
     (errorMessage) => { /* scanning… */ }
@@ -5838,6 +5825,7 @@ function startQrMode() {
 
 // ── 共通: 検出結果ハンドラ ──
 // バーコードモード(Quagga2) と QRモード(html5-qrcode) の両方からここに来る
+// ★重要: スキャナを【先に完全停止】してから結果をシステムへ渡す（モーダル競合防止）
 function handleScanResult(text) {
   if (!text || !_scanActive) return;
   const now = Date.now();
@@ -5851,7 +5839,6 @@ function handleScanResult(text) {
   if (navigator.vibrate) navigator.vibrate(100);
 
   // バーコードモード（Quagga2）の場合のみ、ここで成功表示を出す
-  // QRモード（html5-qrcode）は成功コールバック内で表示済み
   if (_scanMode === 'barcode') {
     const resultEl = document.getElementById('qrScanResult');
     if (resultEl) {
@@ -5866,14 +5853,21 @@ function handleScanResult(text) {
     }
   }
 
-  // コールバック振り分け（GS1→JAN変換は onQrScanned 内で必要な箇所のみ実行）
-  onQrScanned(text);
+  // ★★★ 先にスキャナを完全停止 → 停止後にコールバック実行 ★★★
+  // これにより html5-qrcode のDOM操作と返却モーダルの openModal() が衝突しない
+  const isContinuous = continuousMode && selectedArea && qrTarget === 'lending';
 
-  // 連続貸出モードでなければスキャナを閉じる
-  if (continuousMode && selectedArea && qrTarget === 'lending') {
-    // html5-qrcode は成功コールバック側で resume 処理済み
+  if (isContinuous) {
+    // 連続モード: スキャナは閉じずにコールバック実行
+    onQrScanned(text);
   } else {
+    // 通常モード: スキャナ停止を先に行い、完了後にコールバック
+    _scanActive = false; // 重複防止フラグ
     closeQrScanner();
+    // スキャナのDOMクリーンアップ完了後にモーダルを開く
+    setTimeout(() => {
+      onQrScanned(text);
+    }, 300);
   }
 }
 
