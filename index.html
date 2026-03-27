@@ -979,10 +979,11 @@ a{color:var(--primary);text-decoration:none}
     <div class="modal-body" style="padding:8px">
       <!-- Quagga用: バーコードモード -->
       <div id="scanBarcodeArea" style="display:none;position:relative;min-height:280px;background:#000;border-radius:8px;overflow:hidden">
-        <div id="quaggaViewport" style="width:100%;height:280px"></div>
-        <!-- 中央の赤枠ガイド -->
-        <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:80%;height:60px;border:2px solid #ef4444;border-radius:4px;pointer-events:none;box-shadow:0 0 0 9999px rgba(0,0,0,.4)"></div>
-        <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:80%;height:2px;background:linear-gradient(90deg,transparent,#ef4444 20%,#ef4444 80%,transparent);animation:scanmove 1.5s ease-in-out infinite;pointer-events:none"></div>
+        <div id="quaggaViewport" style="width:100%;height:320px"></div>
+        <!-- 中央の赤枠ガイド（解析範囲と一致: 中央60%×30%） -->
+        <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:60%;height:30%;border:2.5px solid #ef4444;border-radius:6px;pointer-events:none;box-shadow:0 0 0 9999px rgba(0,0,0,.5)"></div>
+        <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:60%;height:2px;background:linear-gradient(90deg,transparent,#ef4444 15%,#ef4444 85%,transparent);animation:scanmove 1.2s ease-in-out infinite;pointer-events:none"></div>
+        <div style="position:absolute;bottom:8px;left:0;right:0;text-align:center;font-size:11px;color:#fca5a5;pointer-events:none">枠内にバーコードを合わせてください</div>
       </div>
       <!-- QRモード用: BarcodeDetector -->
       <div id="scanQrArea" style="display:none;position:relative;min-height:300px;background:#000;border-radius:8px;overflow:hidden">
@@ -1001,7 +1002,7 @@ a{color:var(--primary);text-decoration:none}
 </div>
 <style>
 @keyframes scanmove{0%,100%{margin-top:-28px}50%{margin-top:28px}}
-#quaggaViewport video,#quaggaViewport canvas{width:100%!important;height:280px!important;object-fit:cover!important}
+#quaggaViewport video,#quaggaViewport canvas{width:100%!important;height:320px!important;object-fit:cover!important}
 #quaggaViewport canvas.drawingBuffer{display:none!important}
 </style>
 
@@ -5150,7 +5151,7 @@ let _lastScanned = '';
 let _lastScannedTime = 0;
 let _scanMode = 'barcode'; // 'barcode' or 'qr'
 let _quaggaRunning = false;
-let _confirmBuffer = {};  // 確信度フィルタ用
+let _confirmBuffer = { code: null, count: 0, time: 0 };  // 確信度フィルタ用（3回連続一致で確定）
 
 // Gemini APIキー
 const GEMINI_KEY_STORAGE = 'ME_GEMINI_API_KEY';
@@ -5166,7 +5167,7 @@ function startQrScan(target) {
   qrTarget = target;
   _scanActive = true;
   _scanMode = isBarcodeTarget(target) ? 'barcode' : 'qr';
-  _confirmBuffer = {};
+  _confirmBuffer = { code: null, count: 0, time: 0 };
   document.getElementById('qrOverlay').classList.add('show');
 
   // タイトル
@@ -5221,17 +5222,17 @@ function startBarcodeMode() {
       target: document.getElementById('quaggaViewport'),
       constraints: {
         facingMode: 'environment',
-        width: { min: 1280, ideal: 1920 },
-        height: { min: 720, ideal: 1080 },
-        focusMode: 'continuous'  // オートフォーカス固定
+        width: { min: 1920, ideal: 1920 },   // 1080p固定
+        height: { min: 1080, ideal: 1080 },   // 最高画質
+        focusMode: 'continuous'
       },
-      area: { top: '25%', right: '10%', bottom: '25%', left: '10%' }  // 中央部分のみ解析
+      area: { top: '35%', right: '20%', bottom: '35%', left: '20%' }  // 中央30%×60%のみ解析（枠内限定）
     },
     locator: {
       patchSize: 'large',      // 大パッチで安定検出
       halfSample: false         // フル解像度で解析（GS1-128の細線対応）
     },
-    frequency: 15,              // 15fps解析
+    frequency: 10,              // 10fps解析（精度優先・誤読削減）
     numOfWorkers: navigator.hardwareConcurrency ? Math.min(navigator.hardwareConcurrency, 4) : 2,
     decoder: {
       readers: ['ean_reader', 'code_128_reader'],  // GS1-128 + JAN に絞る
@@ -5259,27 +5260,45 @@ function startBarcodeMode() {
     } catch(e) { /* focusMode非対応端末は無視 */ }
   });
 
-  // 検出イベント（確信度フィルタ付き）
+  // 検出イベント（確信度フィルタ: 同一コード3回連続一致で確定）
   Quagga.onDetected((data) => {
     if (!_scanActive || !data.codeResult) return;
     const code = data.codeResult.code;
     if (!code || code.length < 4) return;
 
-    // 確信度チェック: 同じコードが2回連続で検出されたら確定
+    // エラー補正: codeResult.decodedCodes の平均エラー値チェック
+    const errors = data.codeResult.decodedCodes
+      ?.filter(d => d.error !== undefined)
+      .map(d => d.error) || [];
+    const avgError = errors.length > 0 ? errors.reduce((a, b) => a + b, 0) / errors.length : 1;
+    if (avgError > 0.25) return;  // エラー率25%超は破棄（誤読防止）
+
     const now = Date.now();
-    if (_confirmBuffer.code === code && now - _confirmBuffer.time < 1500) {
-      // 確定！
-      handleScanResult(code);
+    if (_confirmBuffer.code === code && now - _confirmBuffer.time < 2000) {
+      _confirmBuffer.count++;
+      _confirmBuffer.time = now;
+      if (_confirmBuffer.count >= 3) {
+        // 3回連続一致 → 確定！
+        handleScanResult(code);
+      } else {
+        // 2回目: まだ確認中
+        const resultEl = document.getElementById('qrScanResult');
+        if (resultEl) {
+          resultEl.style.display = 'block';
+          resultEl.style.background = '#fef3c7';
+          resultEl.style.color = '#92400e';
+          resultEl.innerHTML = `&#128260; 確認中 (${_confirmBuffer.count}/3): <strong>${code}</strong>`;
+        }
+      }
     } else {
-      // 1回目: バッファに記録
-      _confirmBuffer = { code, time: now };
-      // 仮表示
+      // 新しいコード or タイムアウト → リセット
+      _confirmBuffer = { code, count: 1, time: now };
       const resultEl = document.getElementById('qrScanResult');
       if (resultEl) {
         resultEl.style.display = 'block';
         resultEl.style.background = '#fef3c7';
         resultEl.style.color = '#92400e';
-        resultEl.innerHTML = `&#128260; 確認中: <strong>${code}</strong>（もう一度かざしてください）`;
+        resultEl.innerHTML = `&#128260; 確認中 (1/3): <strong>${code}</strong>`;
       }
     }
   });
@@ -5310,8 +5329,8 @@ function startQrMode() {
   navigator.mediaDevices.getUserMedia({
     video: {
       facingMode: 'environment',
-      width: { ideal: 1280 },
-      height: { ideal: 720 },
+      width: { min: 1920, ideal: 1920 },   // 1080p
+      height: { min: 1080, ideal: 1080 },   // 最高画質
       focusMode: 'continuous'
     }
   }).then(stream => {
