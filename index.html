@@ -1029,11 +1029,18 @@ a{color:var(--primary);text-decoration:none}
         <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:60%;height:2px;background:linear-gradient(90deg,transparent,#ef4444 15%,#ef4444 85%,transparent);animation:scanmove 1.2s ease-in-out infinite;pointer-events:none"></div>
         <div style="position:absolute;bottom:8px;left:0;right:0;text-align:center;font-size:11px;color:#fca5a5;pointer-events:none">枠内にバーコードを合わせてください</div>
       </div>
-      <!-- QRモード用: BarcodeDetector -->
-      <div id="scanQrArea" style="display:none;position:relative;min-height:300px;background:#000;border-radius:8px;overflow:hidden">
-        <video id="qrVideo" autoplay playsinline muted style="width:100%;height:300px;object-fit:cover;display:block"></video>
+      <!-- QRモード用: jsQR + BarcodeDetector -->
+      <div id="scanQrArea" style="display:none;position:relative;min-height:320px;background:#000;border-radius:8px;overflow:hidden">
+        <video id="qrVideo" autoplay playsinline muted style="width:100%;height:320px;object-fit:cover;display:block"></video>
         <canvas id="qrCanvas" style="display:none"></canvas>
-        <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:200px;height:200px;border:2px solid #3b82f6;border-radius:8px;pointer-events:none;box-shadow:0 0 0 9999px rgba(0,0,0,.35)"></div>
+        <!-- QR枠ガイド（中央正方形） -->
+        <div id="qrGuideBox" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:220px;height:220px;pointer-events:none;box-shadow:0 0 0 9999px rgba(0,0,0,.45)">
+          <div style="position:absolute;top:0;left:0;width:30px;height:30px;border-top:3px solid #3b82f6;border-left:3px solid #3b82f6;border-radius:4px 0 0 0"></div>
+          <div style="position:absolute;top:0;right:0;width:30px;height:30px;border-top:3px solid #3b82f6;border-right:3px solid #3b82f6;border-radius:0 4px 0 0"></div>
+          <div style="position:absolute;bottom:0;left:0;width:30px;height:30px;border-bottom:3px solid #3b82f6;border-left:3px solid #3b82f6;border-radius:0 0 0 4px"></div>
+          <div style="position:absolute;bottom:0;right:0;width:30px;height:30px;border-bottom:3px solid #3b82f6;border-right:3px solid #3b82f6;border-radius:0 0 4px 0"></div>
+        </div>
+        <div id="qrDetectionInfo" style="position:absolute;bottom:8px;left:0;right:0;text-align:center;font-size:11px;color:#93c5fd;pointer-events:none">QRコードを枠内に合わせてください</div>
       </div>
       <div style="text-align:center;margin-top:10px">
         <div id="qrScanMethod" style="font-size:11px;color:var(--gray-400);margin-bottom:4px"></div>
@@ -1053,8 +1060,9 @@ a{color:var(--primary);text-decoration:none}
 <!-- Toast Container -->
 <div class="toast-container" id="toastContainer"></div>
 
-<!-- External Libraries: Quagga2 (バーコード読取フォールバック) -->
+<!-- External Libraries: Quagga2 (バーコード読取), jsQR (QRコード読取) -->
 <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.8.4/dist/quagga.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 <script src="items-data.js"></script>
 
 <!-- Data File (inline) -->
@@ -5731,54 +5739,145 @@ function startBarcodeMode() {
   });
 }
 
-// ── QRコードモード: BarcodeDetector API ──
+// ── QRコードモード: jsQR (メイン) + BarcodeDetector (補助) ──
+// jsQRはピュアJSなので全ブラウザで動作する
+let _qrConfirmBuffer = { code: null, count: 0, time: 0 };
+const QR_CONFIRM_COUNT = 2;     // 2回同じコード検出で確定
+const QR_CONFIRM_WINDOW = 2000; // 2秒以内
+
 function startQrMode() {
   const video = document.getElementById('qrVideo');
-  navigator.mediaDevices.getUserMedia({
-    video: {
-      facingMode: 'environment',
-      width: { min: 1920, ideal: 1920 },   // 1080p
-      height: { min: 1080, ideal: 1080 },   // 最高画質
-      focusMode: 'continuous'
+  _qrConfirmBuffer = { code: null, count: 0, time: 0 };
+
+  // カメラ: 解像度を段階的にフォールバック
+  const tryResolutions = [
+    { width: { ideal: 1920 }, height: { ideal: 1080 } },  // 1080p
+    { width: { ideal: 1280 }, height: { ideal: 720 } },   // 720p
+    { width: { ideal: 640 },  height: { ideal: 480 } }    // VGA
+  ];
+
+  (async function tryCamera(idx) {
+    if (idx >= tryResolutions.length) {
+      showToast('カメラの起動に失敗しました', 'error');
+      closeQrScanner();
+      return;
     }
-  }).then(stream => {
-    _scanStream = stream;
-    video.srcObject = stream;
-    video.play();
-
-    // フォーカス設定
     try {
-      const track = stream.getVideoTracks()[0];
-      if (track.getCapabilities && track.getCapabilities().focusMode) {
-        track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
-      }
-    } catch(e) {}
+      const constraints = {
+        video: {
+          facingMode: 'environment',
+          ...tryResolutions[idx]
+        }
+      };
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      _scanStream = stream;
+      video.srcObject = stream;
+      await video.play();
 
-    setTimeout(() => {
-      if (_scanActive) startQrDetectionLoop();
-    }, 500);
-  }).catch(err => {
-    console.error('Camera error:', err);
-    showToast('カメラの起動に失敗: ' + err.message, 'error');
-    closeQrScanner();
-  });
+      // 連続フォーカス
+      try {
+        const track = stream.getVideoTracks()[0];
+        const caps = track.getCapabilities ? track.getCapabilities() : {};
+        if (caps.focusMode && caps.focusMode.includes('continuous')) {
+          await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
+        }
+        const settings = track.getSettings();
+        console.log('[QR Camera]', settings.width + 'x' + settings.height, 'focus:', settings.focusMode || 'default');
+        const infoEl = document.getElementById('qrDetectionInfo');
+        if (infoEl) infoEl.textContent = `${settings.width}x${settings.height} - QRコードを枠内に合わせてください`;
+      } catch(e) {}
+
+      // 映像が安定するのを待つ
+      setTimeout(() => {
+        if (_scanActive) startQrDetectionLoop();
+      }, 600);
+
+    } catch(err) {
+      console.warn('[QR Camera] resolution', idx, 'failed:', err.message);
+      tryCamera(idx + 1);
+    }
+  })(0);
 }
 
 function startQrDetectionLoop() {
   const video = document.getElementById('qrVideo');
+  const canvas = document.getElementById('qrCanvas');
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
+  // BarcodeDetector (補助: 対応ブラウザではこちらも並行動作)
+  let nativeDetector = null;
   if (typeof BarcodeDetector !== 'undefined') {
-    const detector = new BarcodeDetector({ formats: ['qr_code'] });
-    _scanInterval = setInterval(async () => {
-      if (!_scanActive || video.readyState < 2) return;
+    try {
+      nativeDetector = new BarcodeDetector({ formats: ['qr_code'] });
+      console.log('[QR] BarcodeDetector available - dual mode');
+    } catch(e) { nativeDetector = null; }
+  }
+
+  // メインは jsQR (全ブラウザ対応、高精度)
+  const hasJsQR = typeof jsQR !== 'undefined';
+  if (!hasJsQR && !nativeDetector) {
+    document.getElementById('qrScanMethod').textContent = 'QRコード: AI解析のみ (ライブラリ読込失敗)';
+    return;
+  }
+
+  const methodParts = [];
+  if (hasJsQR) methodParts.push('jsQR');
+  if (nativeDetector) methodParts.push('BarcodeDetector');
+  document.getElementById('qrScanMethod').textContent = `QRコード: ${methodParts.join(' + ')}`;
+
+  _scanInterval = setInterval(async () => {
+    if (!_scanActive || video.readyState < 2) return;
+
+    const vw = video.videoWidth;
+    const vh = video.videoHeight;
+    if (!vw || !vh) return;
+
+    // === jsQR: Canvas経由でフレーム解析 ===
+    if (hasJsQR) {
+      canvas.width = vw;
+      canvas.height = vh;
+      ctx.drawImage(video, 0, 0, vw, vh);
+      const imageData = ctx.getImageData(0, 0, vw, vh);
+      const qrResult = jsQR(imageData.data, vw, vh, { inversionAttempts: 'dontInvert' });
+      if (qrResult && qrResult.data) {
+        qrConfirmAndHandle(qrResult.data, 'jsQR');
+        return;
+      }
+    }
+
+    // === BarcodeDetector: ネイティブAPI (補助) ===
+    if (nativeDetector) {
       try {
-        const barcodes = await detector.detect(video);
-        if (barcodes.length > 0) handleScanResult(barcodes[0].rawValue);
+        const barcodes = await nativeDetector.detect(video);
+        if (barcodes.length > 0 && barcodes[0].rawValue) {
+          qrConfirmAndHandle(barcodes[0].rawValue, 'BarcodeDetector');
+        }
       } catch(e) {}
-    }, 150);
+    }
+  }, 120); // 120msインターバル (約8fps解析)
+}
+
+// QR確信度フィルタ: 同じコードを2回連続検出で確定
+function qrConfirmAndHandle(code, source) {
+  if (!code || !_scanActive) return;
+  const now = Date.now();
+
+  if (_qrConfirmBuffer.code === code && (now - _qrConfirmBuffer.time) < QR_CONFIRM_WINDOW) {
+    _qrConfirmBuffer.count++;
+    if (_qrConfirmBuffer.count >= QR_CONFIRM_COUNT) {
+      console.log(`[QR] CONFIRMED by ${source}:`, code, `(${_qrConfirmBuffer.count} reads)`);
+      // 枠を緑に変える（成功フィードバック）
+      const guideBox = document.getElementById('qrGuideBox');
+      if (guideBox) {
+        guideBox.querySelectorAll('div').forEach(d => {
+          d.style.borderColor = '#10b981';
+        });
+      }
+      handleScanResult(code);
+    }
   } else {
-    // BarcodeDetector非対応 → Quagga2でQRは読めないのでGemini AI待ち
-    document.getElementById('qrScanMethod').textContent = 'QRコード: AI解析待ち（BarcodeDetector非対応）';
+    // 初回 or 別コード → バッファリセット
+    _qrConfirmBuffer = { code, count: 1, time: now };
   }
 }
 
@@ -5845,7 +5944,7 @@ async function tryGeminiOCR() {
 
   const prompt = _scanMode === 'barcode'
     ? 'この画像に写っているバーコード（GS1-128、CODE128、JAN/EAN）を読み取ってください。バーコード下の数字列（AI+データ）を含めてそのまま返してください。GS1-128の場合は「01」で始まるGTIN部分を優先してください。数字データのみ返してください。読み取れない場合は「NONE」。余計な説明は不要です。'
-    : 'この画像に写っているQRコードを読み取ってください。QRコードに含まれるテキストデータのみを返してください。読み取れない場合は「NONE」。余計な説明は不要です。';
+    : 'この画像に写っているQRコードを読み取ってください。QRコードに含まれるテキストデータ（URL、ID、文字列など）をそのまま正確に1行で返してください。エンコードされた文字もそのまま返してください。複数ある場合は最も大きいQRコードの内容のみ。読み取れない場合は「NONE」とだけ返してください。余計な説明や装飾は一切不要です。';
 
   try {
     const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
@@ -5860,10 +5959,18 @@ async function tryGeminiOCR() {
     const aiText = (json.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
     console.log('[Gemini AI] response:', aiText);
 
-    if (aiText && aiText !== 'NONE') {
-      const firstCode = aiText.split('\n')[0].replace(/[^0-9A-Za-z\-]/g, '');
-      if (firstCode.length >= 4) {
-        if (aiEl) { aiEl.style.background = '#d1fae5'; aiEl.style.color = '#065f46'; aiEl.innerHTML = `&#129302; AI読取成功: <strong>${firstCode}</strong>`; }
+    if (aiText && aiText !== 'NONE' && aiText.toUpperCase() !== 'NONE') {
+      // QRコードはURL等を含むので、バーコードとQRでフィルタを分ける
+      let firstCode;
+      if (_scanMode === 'barcode') {
+        // バーコード: 数字・英字・ハイフンのみ
+        firstCode = aiText.split('\n')[0].replace(/[^0-9A-Za-z\-]/g, '');
+      } else {
+        // QRコード: URL含む文字列を保持（改行・制御文字のみ除去）
+        firstCode = aiText.split('\n')[0].replace(/[\x00-\x1f\x7f]/g, '').trim();
+      }
+      if (firstCode.length >= 2) {
+        if (aiEl) { aiEl.style.background = '#d1fae5'; aiEl.style.color = '#065f46'; aiEl.innerHTML = `&#129302; AI読取成功: <strong>${firstCode.length > 50 ? firstCode.substring(0,50)+'...' : firstCode}</strong>`; }
         setTimeout(() => handleScanResult(firstCode), 500);
         return;
       }
@@ -5923,6 +6030,7 @@ function onQrScanned(text) {
 // ── クリーンアップ ──
 function closeQrScanner() {
   _scanActive = false;
+  _qrConfirmBuffer = { code: null, count: 0, time: 0 };
   if (_scanInterval) { clearInterval(_scanInterval); _scanInterval = null; }
   if (_aiTimer) { clearTimeout(_aiTimer); _aiTimer = null; }
   // Quagga停止
