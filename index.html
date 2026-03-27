@@ -297,6 +297,9 @@ a{color:var(--primary);text-decoration:none}
     <div class="nav-item" data-screen="dashboard" onclick="showScreen('dashboard')">
       <span class="icon">&#128202;</span>ダッシュボード
     </div>
+    <div class="nav-item" data-screen="utilization" onclick="showScreen('utilization')">
+      <span class="icon">&#128200;</span>稼働率分析
+    </div>
     <div class="nav-section">設定管理</div>
     <div class="nav-item" data-screen="master-equipment" onclick="showScreen('master-equipment')">
       <span class="icon">&#128221;</span>機器マスター
@@ -592,6 +595,47 @@ a{color:var(--primary);text-decoration:none}
           <div class="card-header"><h3>場所別貸出数</h3></div>
           <div class="card-body" id="dashLocationList"></div>
         </div>
+      </div>
+    </div>
+
+    <!-- ========== 稼働率分析画面 ========== -->
+    <div class="screen" id="screen-utilization">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+        <label style="font-weight:600;font-size:14px">対象月:</label>
+        <input type="month" class="form-input" id="utilMonth" style="width:180px"
+               onchange="renderUtilization()">
+        <button class="btn btn-primary btn-sm" onclick="renderUtilization()">集計</button>
+      </div>
+
+      <!-- サマリーカード -->
+      <div class="stats-grid" id="utilSummaryCards"></div>
+
+      <!-- 種別ごとの稼働率テーブル -->
+      <div class="card" style="margin-top:16px">
+        <div class="card-header"><h3>種別別 月間稼働率</h3></div>
+        <div class="card-body" id="utilCategoryTable" style="overflow-x:auto"></div>
+      </div>
+
+      <!-- 停滞疑いリスト -->
+      <div class="card" style="margin-top:16px">
+        <div class="card-header" style="background:#fef3c7">
+          <h3 style="color:#92400e">停滞疑い機器（貸出 168時間超・未返却）</h3>
+        </div>
+        <div class="card-body" id="utilStagnantList"></div>
+      </div>
+
+      <!-- 人工呼吸器アベイラビリティ -->
+      <div class="card" style="margin-top:16px">
+        <div class="card-header" style="background:#ede9fe">
+          <h3 style="color:#5b21b6">人工呼吸器 アベイラビリティ</h3>
+        </div>
+        <div class="card-body" id="utilVentAvailability"></div>
+      </div>
+
+      <!-- 機器別詳細 -->
+      <div class="card" style="margin-top:16px">
+        <div class="card-header"><h3>機器別 稼働時間詳細</h3></div>
+        <div class="card-body" id="utilDetailTable" style="overflow-x:auto;max-height:500px;overflow-y:auto"></div>
       </div>
     </div>
 
@@ -3052,6 +3096,7 @@ function showScreen(name) {
   const titles = {
     lending: '貸出・返却', status: '貸出状況', equipment: '機器一覧',
     inspection: '点検登録', repair: '修理記録', history: '貸出履歴', dashboard: 'ダッシュボード',
+    utilization: '稼働率分析',
     'master-equipment': '機器マスター管理', 'master-staff': 'スタッフ管理',
     'master-dept': '部署管理', 'master-area': '貸出エリア管理', 'master-items': '物品マスター',
     inventory: '入出庫管理', orders: '発注管理'
@@ -3076,6 +3121,7 @@ function showScreen(name) {
   if (name === 'master-items') initItemsMaster();
   if (name === 'inventory') initInventory();
   if (name === 'orders') initOrders();
+  if (name === 'utilization') initUtilization();
   if (name === 'inspection') initInspectionScreen();
 
   // Close mobile sidebar
@@ -5135,6 +5181,368 @@ function renderDashboard() {
         </div>
       `;
     }).join('');
+}
+
+// ===================== 稼働率分析 =====================
+// 対象カテゴリ
+const UTIL_CATEGORIES = ['輸液ポンプ', 'シリンジポンプ', '人工呼吸器'];
+const STAGNATION_THRESHOLD_HOURS = 168; // 停滞疑い: 1週間
+
+function initUtilization() {
+  const monthInput = document.getElementById('utilMonth');
+  if (!monthInput.value) {
+    const now = new Date();
+    monthInput.value = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+  }
+  renderUtilization();
+}
+
+// ── 月またぎ対応: 指定月の範囲内の貸出時間を正確に算出 ──
+function calcLendingHoursInMonth(lendStart, lendEnd, monthStart, monthEnd) {
+  // lendStart/lendEnd は Date, lendEnd が null なら now
+  const effectiveEnd = lendEnd || new Date();
+  const clampedStart = lendStart < monthStart ? monthStart : lendStart;
+  const clampedEnd = effectiveEnd > monthEnd ? monthEnd : effectiveEnd;
+  if (clampedStart >= clampedEnd) return 0;
+  return (clampedEnd - clampedStart) / (1000 * 60 * 60); // ミリ秒→時間
+}
+
+// ── 履歴から貸出/返却ペアを構築 ──
+function buildLendingPairs(historyRecords, equipmentId) {
+  // 該当機器のログを時系列でソート
+  const logs = historyRecords
+    .filter(h => h.equipmentId === equipmentId)
+    .sort((a, b) => (a.timestamp || '').localeCompare(b.timestamp || ''));
+
+  const pairs = [];
+  let currentLend = null;
+
+  for (const log of logs) {
+    if (log.type === '貸出') {
+      // 前回の貸出が未返却のまま次の貸出があれば、その時点で区切る
+      if (currentLend) {
+        pairs.push({ start: new Date(currentLend.timestamp), end: new Date(log.timestamp), equipmentId });
+      }
+      currentLend = log;
+    } else if (log.type === '返却') {
+      if (currentLend) {
+        pairs.push({ start: new Date(currentLend.timestamp), end: new Date(log.timestamp), equipmentId });
+        currentLend = null;
+      }
+    }
+  }
+  // 未返却（現在貸出中）
+  if (currentLend) {
+    pairs.push({ start: new Date(currentLend.timestamp), end: null, equipmentId });
+  }
+  return pairs;
+}
+
+// ── メイン集計ロジック ──
+async function renderUtilization() {
+  const monthStr = document.getElementById('utilMonth').value;
+  if (!monthStr) return;
+
+  const [year, month] = monthStr.split('-').map(Number);
+  const monthStart = new Date(year, month - 1, 1);
+  const monthEnd = new Date(year, month, 1); // 翌月1日 = 当月末+1
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const now = new Date();
+
+  // データ取得
+  const allHistory = await dbGetAll('history');
+  const allRepairs = await dbGetAll('repairs');
+  const allInspections = await dbGetAll('inspections');
+
+  // 対象カテゴリの機器（廃棄除外）
+  const targetEquipment = {};
+  for (const cat of UTIL_CATEGORIES) {
+    targetEquipment[cat] = allEquipment.filter(eq =>
+      eq.category === cat && eq.discard !== '廃棄' && eq.discard !== '廃棄待ち'
+    );
+  }
+
+  // カテゴリ別集計結果
+  const results = {};
+  const allStagnant = [];
+  const allDetails = [];
+
+  for (const cat of UTIL_CATEGORIES) {
+    const eqList = targetEquipment[cat];
+    const unitCount = eqList.length;
+    const maxHours = unitCount * 24 * daysInMonth;
+    let totalLendingHours = 0;
+
+    for (const eq of eqList) {
+      const pairs = buildLendingPairs(allHistory, eq.id);
+      let eqHours = 0;
+
+      for (const pair of pairs) {
+        const hours = calcLendingHoursInMonth(pair.start, pair.end, monthStart, monthEnd);
+        eqHours += hours;
+
+        // 停滞疑いチェック: 未返却 & 貸出期間 > 168時間
+        if (!pair.end) {
+          const lendingDuration = (now - pair.start) / (1000 * 60 * 60);
+          if (lendingDuration > STAGNATION_THRESHOLD_HOURS) {
+            allStagnant.push({
+              id: eq.id,
+              name: eq.name,
+              category: cat,
+              location: eq.location,
+              lendStart: pair.start,
+              durationHours: Math.round(lendingDuration),
+              durationDays: Math.round(lendingDuration / 24 * 10) / 10
+            });
+          }
+        }
+      }
+
+      totalLendingHours += eqHours;
+      allDetails.push({
+        id: eq.id,
+        name: eq.name,
+        category: cat,
+        hours: Math.round(eqHours * 10) / 10,
+        status: eq.lending || eq.status || '-'
+      });
+    }
+
+    const utilizationRate = maxHours > 0 ? (totalLendingHours / maxHours * 100) : 0;
+
+    results[cat] = {
+      unitCount,
+      maxHours,
+      totalLendingHours: Math.round(totalLendingHours * 10) / 10,
+      utilizationRate: Math.round(utilizationRate * 10) / 10
+    };
+  }
+
+  // ── 人工呼吸器アベイラビリティ計算 ──
+  let ventAvailability = null;
+  const ventCat = '人工呼吸器';
+  if (targetEquipment[ventCat] && targetEquipment[ventCat].length > 0) {
+    const ventEqList = targetEquipment[ventCat];
+    let totalDowntimeHours = 0;
+
+    for (const eq of ventEqList) {
+      // 修理ダウンタイム: receptionDate → completedDate がこの月に重なる期間
+      const eqRepairs = allRepairs.filter(r => r.equipmentId === eq.id);
+      for (const r of eqRepairs) {
+        if (!r.receptionDate) continue;
+        const rStart = new Date(r.receptionDate);
+        const rEnd = r.completedDate ? new Date(r.completedDate) : now;
+        totalDowntimeHours += calcLendingHoursInMonth(rStart, rEnd, monthStart, monthEnd);
+      }
+      // 点検ダウンタイム: 点検日を1日(24h)のダウンタイムとして計上
+      const eqInsps = allInspections.filter(i => i.equipmentId === eq.id && i.date);
+      for (const i of eqInsps) {
+        const iDate = new Date(i.date);
+        if (iDate >= monthStart && iDate < monthEnd) {
+          totalDowntimeHours += 24; // 点検1回 = 1日
+        }
+      }
+    }
+
+    const ventRes = results[ventCat];
+    const adjustedDenom = ventRes.maxHours - totalDowntimeHours;
+    const availability = adjustedDenom > 0
+      ? (ventRes.totalLendingHours / adjustedDenom * 100)
+      : 0;
+
+    ventAvailability = {
+      unitCount: ventRes.unitCount,
+      maxHours: ventRes.maxHours,
+      downtimeHours: Math.round(totalDowntimeHours * 10) / 10,
+      adjustedDenom: Math.round(adjustedDenom * 10) / 10,
+      lendingHours: ventRes.totalLendingHours,
+      availability: Math.round(availability * 10) / 10,
+      utilizationRate: ventRes.utilizationRate
+    };
+  }
+
+  // ──────── 描画 ────────
+  renderUtilSummary(results, monthStr, daysInMonth);
+  renderUtilCategoryTable(results, daysInMonth);
+  renderUtilStagnant(allStagnant);
+  renderUtilVentAvailability(ventAvailability, monthStr);
+  renderUtilDetail(allDetails);
+}
+
+// ── サマリーカード描画 ──
+function renderUtilSummary(results, monthStr, daysInMonth) {
+  const totalUnits = UTIL_CATEGORIES.reduce((s, c) => s + results[c].unitCount, 0);
+  const totalHours = UTIL_CATEGORIES.reduce((s, c) => s + results[c].totalLendingHours, 0);
+  const totalMax = UTIL_CATEGORIES.reduce((s, c) => s + results[c].maxHours, 0);
+  const overallRate = totalMax > 0 ? Math.round(totalHours / totalMax * 1000) / 10 : 0;
+
+  document.getElementById('utilSummaryCards').innerHTML = `
+    <div class="stat-card blue">
+      <div class="stat-label">${monthStr} 対象機器数</div>
+      <div class="stat-value">${totalUnits}<small style="font-size:14px"> 台</small></div>
+    </div>
+    <div class="stat-card green">
+      <div class="stat-label">総貸出時間</div>
+      <div class="stat-value">${totalHours.toLocaleString()}<small style="font-size:14px"> h</small></div>
+    </div>
+    <div class="stat-card orange">
+      <div class="stat-label">総合稼働率</div>
+      <div class="stat-value">${overallRate}<small style="font-size:14px"> %</small></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">月稼働可能時間</div>
+      <div class="stat-value">${totalMax.toLocaleString()}<small style="font-size:14px"> h</small></div>
+      <div style="font-size:11px;color:var(--gray-400);margin-top:2px">${totalUnits}台 x 24h x ${daysInMonth}日</div>
+    </div>
+  `;
+}
+
+// ── 種別別テーブル描画 ──
+function renderUtilCategoryTable(results, daysInMonth) {
+  const rateColor = (r) => r >= 60 ? '#059669' : r >= 30 ? '#d97706' : '#dc2626';
+  const rateBar = (r) => `
+    <div style="display:flex;align-items:center;gap:8px">
+      <div style="flex:1;background:var(--gray-100);border-radius:4px;height:22px;overflow:hidden">
+        <div style="width:${Math.min(r, 100)}%;background:${rateColor(r)};height:100%;border-radius:4px;transition:width .5s"></div>
+      </div>
+      <span style="font-weight:700;font-size:15px;color:${rateColor(r)};min-width:60px;text-align:right">${r} %</span>
+    </div>`;
+
+  let html = `<table style="width:100%;border-collapse:collapse;font-size:13px">
+    <thead><tr style="background:var(--gray-50);text-align:left">
+      <th style="padding:10px 12px">種別</th>
+      <th style="padding:10px 8px;text-align:center">保有台数</th>
+      <th style="padding:10px 8px;text-align:right">月間上限 (h)</th>
+      <th style="padding:10px 8px;text-align:right">貸出時間 (h)</th>
+      <th style="padding:10px 12px;min-width:200px">稼働率</th>
+    </tr></thead><tbody>`;
+
+  for (const cat of UTIL_CATEGORIES) {
+    const r = results[cat];
+    html += `<tr style="border-bottom:1px solid var(--gray-100)">
+      <td style="padding:10px 12px;font-weight:600">${cat}</td>
+      <td style="padding:10px 8px;text-align:center">${r.unitCount} 台</td>
+      <td style="padding:10px 8px;text-align:right">${r.maxHours.toLocaleString()}</td>
+      <td style="padding:10px 8px;text-align:right">${r.totalLendingHours.toLocaleString()}</td>
+      <td style="padding:10px 12px">${rateBar(r.utilizationRate)}</td>
+    </tr>`;
+  }
+  html += '</tbody></table>';
+  document.getElementById('utilCategoryTable').innerHTML = html;
+}
+
+// ── 停滞疑いリスト描画 ──
+function renderUtilStagnant(stagnant) {
+  const el = document.getElementById('utilStagnantList');
+  if (stagnant.length === 0) {
+    el.innerHTML = '<p style="color:var(--gray-400);text-align:center;padding:16px">停滞疑い機器はありません</p>';
+    return;
+  }
+  stagnant.sort((a, b) => b.durationHours - a.durationHours);
+  let html = `<table style="width:100%;border-collapse:collapse;font-size:13px">
+    <thead><tr style="background:#fef3c7;text-align:left">
+      <th style="padding:8px 12px">機器ID</th>
+      <th style="padding:8px">機器名</th>
+      <th style="padding:8px">種別</th>
+      <th style="padding:8px">現在地</th>
+      <th style="padding:8px">貸出開始</th>
+      <th style="padding:8px;text-align:right">経過時間</th>
+      <th style="padding:8px;text-align:center">状態</th>
+    </tr></thead><tbody>`;
+  for (const s of stagnant) {
+    const severity = s.durationHours > 336 ? '#dc2626' : '#d97706'; // 2週間超は赤
+    html += `<tr style="border-bottom:1px solid var(--gray-100)">
+      <td style="padding:8px 12px;font-weight:600">${s.id}</td>
+      <td style="padding:8px">${s.name}</td>
+      <td style="padding:8px">${s.category}</td>
+      <td style="padding:8px">${s.location || '-'}</td>
+      <td style="padding:8px">${s.lendStart.toLocaleDateString('ja-JP')}</td>
+      <td style="padding:8px;text-align:right;font-weight:600;color:${severity}">${s.durationDays} 日 (${s.durationHours}h)</td>
+      <td style="padding:8px;text-align:center">
+        <span style="display:inline-block;padding:2px 10px;border-radius:12px;font-size:11px;font-weight:700;background:#fef3c7;color:#92400e;border:1px solid #f59e0b">
+          停滞疑い
+        </span>
+      </td>
+    </tr>`;
+  }
+  html += '</tbody></table>';
+  el.innerHTML = html;
+}
+
+// ── 人工呼吸器アベイラビリティ描画 ──
+function renderUtilVentAvailability(data, monthStr) {
+  const el = document.getElementById('utilVentAvailability');
+  if (!data || data.unitCount === 0) {
+    el.innerHTML = '<p style="color:var(--gray-400);text-align:center;padding:16px">人工呼吸器の登録がありません</p>';
+    return;
+  }
+
+  const rateColor = (r) => r >= 60 ? '#059669' : r >= 30 ? '#d97706' : '#dc2626';
+
+  el.innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:16px">
+      <div style="text-align:center;padding:12px;background:#f5f3ff;border-radius:8px">
+        <div style="font-size:12px;color:#7c3aed">通常稼働率</div>
+        <div style="font-size:28px;font-weight:800;color:${rateColor(data.utilizationRate)}">${data.utilizationRate}%</div>
+        <div style="font-size:11px;color:var(--gray-400)">総貸出h / (台数 x 24h x 日数)</div>
+      </div>
+      <div style="text-align:center;padding:12px;background:#f5f3ff;border-radius:8px">
+        <div style="font-size:12px;color:#7c3aed">アベイラビリティ</div>
+        <div style="font-size:28px;font-weight:800;color:${rateColor(data.availability)}">${data.availability}%</div>
+        <div style="font-size:11px;color:var(--gray-400)">総貸出h / (上限h - 点検修理h)</div>
+      </div>
+      <div style="text-align:center;padding:12px;background:#f5f3ff;border-radius:8px">
+        <div style="font-size:12px;color:#7c3aed">点検・修理ダウンタイム</div>
+        <div style="font-size:28px;font-weight:800;color:#5b21b6">${data.downtimeHours} h</div>
+        <div style="font-size:11px;color:var(--gray-400)">修理期間 + 点検日(各24h)</div>
+      </div>
+    </div>
+    <div style="font-size:12px;color:var(--gray-500);padding:8px 12px;background:var(--gray-50);border-radius:6px;line-height:1.8">
+      <strong>${monthStr} 人工呼吸器（${data.unitCount}台）</strong><br>
+      月間上限: ${data.maxHours.toLocaleString()} h &nbsp;|&nbsp;
+      ダウンタイム: ${data.downtimeHours} h &nbsp;|&nbsp;
+      有効稼働可能: ${data.adjustedDenom.toLocaleString()} h &nbsp;|&nbsp;
+      実稼働: ${data.lendingHours.toLocaleString()} h<br>
+      <span style="color:#5b21b6">※ 呼吸器は「貸出 = 100%実働」として計算。アベイラビリティは点検・修理期間を分母から除外した実質稼働率です。</span>
+    </div>
+  `;
+}
+
+// ── 機器別詳細テーブル描画 ──
+function renderUtilDetail(details) {
+  details.sort((a, b) => b.hours - a.hours);
+  const el = document.getElementById('utilDetailTable');
+  if (details.length === 0) {
+    el.innerHTML = '<p style="color:var(--gray-400);text-align:center">対象機器がありません</p>';
+    return;
+  }
+  const maxH = Math.max(...details.map(d => d.hours), 1);
+  let html = `<table style="width:100%;border-collapse:collapse;font-size:13px">
+    <thead><tr style="background:var(--gray-50);text-align:left;position:sticky;top:0">
+      <th style="padding:8px 12px">機器ID</th>
+      <th style="padding:8px">機器名</th>
+      <th style="padding:8px">種別</th>
+      <th style="padding:8px;text-align:center">現在状態</th>
+      <th style="padding:8px;text-align:right">貸出時間 (h)</th>
+      <th style="padding:8px;min-width:120px"></th>
+    </tr></thead><tbody>`;
+  for (const d of details) {
+    const barW = maxH > 0 ? Math.round(d.hours / maxH * 100) : 0;
+    html += `<tr style="border-bottom:1px solid var(--gray-100)">
+      <td style="padding:6px 12px;font-weight:600;font-size:12px">${d.id}</td>
+      <td style="padding:6px 8px">${d.name}</td>
+      <td style="padding:6px 8px;font-size:12px">${d.category}</td>
+      <td style="padding:6px 8px;text-align:center">${getStatusBadge(d.status)}</td>
+      <td style="padding:6px 8px;text-align:right;font-weight:600">${d.hours}</td>
+      <td style="padding:6px 8px">
+        <div style="background:var(--gray-100);border-radius:3px;height:14px;overflow:hidden">
+          <div style="width:${barW}%;background:var(--primary);height:100%;border-radius:3px"></div>
+        </div>
+      </td>
+    </tr>`;
+  }
+  html += '</tbody></table>';
+  el.innerHTML = html;
 }
 
 // ===================== SCANNER (2モード) =====================
