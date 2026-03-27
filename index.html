@@ -969,32 +969,40 @@ a{color:var(--primary);text-decoration:none}
   </div>
 </div>
 
-<!-- QR Scanner Modal -->
+<!-- Scanner Modal -->
 <div class="modal-overlay" id="qrOverlay" onclick="if(event.target===this)closeQrScanner()">
   <div class="modal" style="max-width:520px">
     <div class="modal-header">
-      <h3 id="qrScanTitle">QR / バーコード スキャン</h3>
+      <h3 id="qrScanTitle">スキャン</h3>
       <button class="modal-close" onclick="closeQrScanner()">&times;</button>
     </div>
     <div class="modal-body" style="padding:8px">
-      <div id="qrReader" style="position:relative;min-height:300px;background:#000;border-radius:8px;overflow:hidden">
-        <video id="qrVideo" autoplay playsinline muted style="width:100%;height:100%;object-fit:cover;display:block"></video>
+      <!-- Quagga用: バーコードモード -->
+      <div id="scanBarcodeArea" style="display:none;position:relative;min-height:280px;background:#000;border-radius:8px;overflow:hidden">
+        <div id="quaggaViewport" style="width:100%;height:280px"></div>
+        <!-- 中央の赤枠ガイド -->
+        <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:80%;height:60px;border:2px solid #ef4444;border-radius:4px;pointer-events:none;box-shadow:0 0 0 9999px rgba(0,0,0,.4)"></div>
+        <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:80%;height:2px;background:linear-gradient(90deg,transparent,#ef4444 20%,#ef4444 80%,transparent);animation:scanmove 1.5s ease-in-out infinite;pointer-events:none"></div>
+      </div>
+      <!-- QRモード用: BarcodeDetector -->
+      <div id="scanQrArea" style="display:none;position:relative;min-height:300px;background:#000;border-radius:8px;overflow:hidden">
+        <video id="qrVideo" autoplay playsinline muted style="width:100%;height:300px;object-fit:cover;display:block"></video>
         <canvas id="qrCanvas" style="display:none"></canvas>
-        <div id="qrScanLine" style="position:absolute;left:10%;right:10%;top:50%;height:2px;background:linear-gradient(90deg,transparent,#ef4444,#ef4444,transparent);animation:scanline 2s ease-in-out infinite;pointer-events:none"></div>
+        <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:200px;height:200px;border:2px solid #3b82f6;border-radius:8px;pointer-events:none;box-shadow:0 0 0 9999px rgba(0,0,0,.35)"></div>
       </div>
       <div style="text-align:center;margin-top:10px">
         <div id="qrScanMethod" style="font-size:11px;color:var(--gray-400);margin-bottom:4px"></div>
         <div id="qrScanResult" style="display:none;margin-top:8px;padding:8px 12px;border-radius:8px;font-size:13px;font-weight:600"></div>
-        <div id="qrAiStatus" style="display:none;margin-top:8px;padding:10px 12px;border-radius:8px;font-size:13px;background:#fef3c7;color:#92400e">
-          &#129302; AI解析中...バーコード画像をGeminiに送信しています
-        </div>
+        <div id="qrAiStatus" style="display:none;margin-top:8px;padding:10px 12px;border-radius:8px;font-size:13px;background:#fef3c7;color:#92400e"></div>
       </div>
       <div id="qrContinuousStatus" style="display:none;text-align:center;margin-top:8px;padding:8px;background:#065f46;color:#6ee7b7;border-radius:8px;font-size:13px;font-weight:600"></div>
     </div>
   </div>
 </div>
 <style>
-@keyframes scanline{0%,100%{top:30%;opacity:.5}50%{top:70%;opacity:1}}
+@keyframes scanmove{0%,100%{margin-top:-28px}50%{margin-top:28px}}
+#quaggaViewport video,#quaggaViewport canvas{width:100%!important;height:280px!important;object-fit:cover!important}
+#quaggaViewport canvas.drawingBuffer{display:none!important}
 </style>
 
 <!-- Toast Container -->
@@ -5128,294 +5136,353 @@ function renderDashboard() {
     }).join('');
 }
 
-// ===================== BARCODE SCANNER (3-tier) =====================
-// 1. BarcodeDetector API (Chrome/Edge内蔵 - 最高精度)
-// 2. Quagga2 (JSフォールバック - 1Dバーコード強い)
-// 3. Gemini AI (数秒読めなければ画像をAI解析)
-// ====================================================================
+// ===================== SCANNER (2モード) =====================
+// バーコードモード: Quagga2 LiveStream (GS1-128/JAN特化, 高精度)
+// QRモード: BarcodeDetector API (機器IDのQRコード用)
+// 共通: 5秒読めなければ Gemini AI OCR フォールバック
+// ================================================================
 let qrTarget = null;
 let _scanStream = null;
-let _scanTimer = null;
 let _scanInterval = null;
 let _aiTimer = null;
 let _scanActive = false;
 let _lastScanned = '';
 let _lastScannedTime = 0;
+let _scanMode = 'barcode'; // 'barcode' or 'qr'
+let _quaggaRunning = false;
+let _confirmBuffer = {};  // 確信度フィルタ用
 
-// Gemini APIキー（localStorage保存）
+// Gemini APIキー
 const GEMINI_KEY_STORAGE = 'ME_GEMINI_API_KEY';
 function getGeminiKey() { return localStorage.getItem(GEMINI_KEY_STORAGE) || ''; }
 function setGeminiKey(key) { localStorage.setItem(GEMINI_KEY_STORAGE, key); }
 
-// BarcodeDetector APIサポート確認
-const hasBarcodeAPI = typeof BarcodeDetector !== 'undefined';
+// バーコード主体のターゲットか判定
+function isBarcodeTarget(target) {
+  return ['order','inventory','itemSearch','itemJan'].includes(target);
+}
 
 function startQrScan(target) {
   qrTarget = target;
   _scanActive = true;
+  _scanMode = isBarcodeTarget(target) ? 'barcode' : 'qr';
+  _confirmBuffer = {};
   document.getElementById('qrOverlay').classList.add('show');
 
-  // タイトル更新
+  // タイトル
   const titles = {
-    lending: '機器ID スキャン（貸出）', return: '機器ID スキャン（返却）',
-    inspection: '機器ID スキャン（点検）', order: 'バーコード スキャン（発注）',
-    inventory: 'バーコード スキャン（入出庫）', itemSearch: 'バーコード スキャン（物品検索）',
-    itemJan: 'バーコード スキャン（物品マスター）'
+    lending: '&#128247; QRコード スキャン（貸出）',
+    return: '&#128247; QRコード スキャン（返却）',
+    inspection: '&#128247; QRコード スキャン（点検）',
+    order: '&#129505; バーコード スキャン（発注）',
+    inventory: '&#129505; バーコード スキャン（入出庫）',
+    itemSearch: '&#129505; バーコード スキャン（物品検索）',
+    itemJan: '&#129505; バーコード スキャン（物品マスター）'
   };
-  const titleEl = document.getElementById('qrScanTitle');
-  if (titleEl) titleEl.textContent = titles[target] || 'QR / バーコード スキャン';
+  document.getElementById('qrScanTitle').innerHTML = titles[target] || 'スキャン';
+
+  // UI切替
+  document.getElementById('scanBarcodeArea').style.display = _scanMode === 'barcode' ? '' : 'none';
+  document.getElementById('scanQrArea').style.display = _scanMode === 'qr' ? '' : 'none';
 
   // リセット
-  const resultEl = document.getElementById('qrScanResult');
-  if (resultEl) resultEl.style.display = 'none';
-  const aiEl = document.getElementById('qrAiStatus');
-  if (aiEl) aiEl.style.display = 'none';
-  const methodEl = document.getElementById('qrScanMethod');
-  if (methodEl) methodEl.textContent = hasBarcodeAPI ? 'BarcodeDetector API (高精度)' : 'Quagga2 (JSデコーダー)';
+  document.getElementById('qrScanResult').style.display = 'none';
+  document.getElementById('qrAiStatus').style.display = 'none';
+  document.getElementById('qrScanMethod').textContent =
+    _scanMode === 'barcode' ? 'Quagga2 LiveStream (GS1-128 / EAN 特化)' : 'BarcodeDetector API (QRコード)';
 
-  // カメラ起動
+  if (_scanMode === 'barcode') {
+    startBarcodeMode();
+  } else {
+    startQrMode();
+  }
+
+  // Gemini AIフォールバック: 5秒読めなければ
+  _aiTimer = setTimeout(() => {
+    if (_scanActive) {
+      if (getGeminiKey()) tryGeminiOCR();
+      else showGeminiKeyPrompt();
+    }
+  }, 5000);
+}
+
+// ── バーコードモード: Quagga2 LiveStream ──
+function startBarcodeMode() {
+  if (typeof Quagga === 'undefined') {
+    document.getElementById('qrScanMethod').textContent = 'Quagga2が読み込めません';
+    showToast('Quagga2ライブラリの読み込みに失敗しました。インターネット接続を確認してください。', 'error');
+    return;
+  }
+
+  Quagga.init({
+    inputStream: {
+      name: 'Live',
+      type: 'LiveStream',
+      target: document.getElementById('quaggaViewport'),
+      constraints: {
+        facingMode: 'environment',
+        width: { min: 1280, ideal: 1920 },
+        height: { min: 720, ideal: 1080 },
+        focusMode: 'continuous'  // オートフォーカス固定
+      },
+      area: { top: '25%', right: '10%', bottom: '25%', left: '10%' }  // 中央部分のみ解析
+    },
+    locator: {
+      patchSize: 'large',      // 大パッチで安定検出
+      halfSample: false         // フル解像度で解析（GS1-128の細線対応）
+    },
+    frequency: 15,              // 15fps解析
+    numOfWorkers: navigator.hardwareConcurrency ? Math.min(navigator.hardwareConcurrency, 4) : 2,
+    decoder: {
+      readers: ['ean_reader', 'code_128_reader'],  // GS1-128 + JAN に絞る
+      multiple: false
+    },
+    locate: true
+  }, (err) => {
+    if (err) {
+      console.error('Quagga init error:', err);
+      showToast('カメラの起動に失敗: ' + (err.message || err), 'error');
+      return;
+    }
+    Quagga.start();
+    _quaggaRunning = true;
+
+    // フォーカスモード設定を試行
+    try {
+      const track = Quagga.CameraAccess.getActiveTrack();
+      if (track && track.getCapabilities) {
+        const caps = track.getCapabilities();
+        if (caps.focusMode && caps.focusMode.includes('continuous')) {
+          track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
+        }
+      }
+    } catch(e) { /* focusMode非対応端末は無視 */ }
+  });
+
+  // 検出イベント（確信度フィルタ付き）
+  Quagga.onDetected((data) => {
+    if (!_scanActive || !data.codeResult) return;
+    const code = data.codeResult.code;
+    if (!code || code.length < 4) return;
+
+    // 確信度チェック: 同じコードが2回連続で検出されたら確定
+    const now = Date.now();
+    if (_confirmBuffer.code === code && now - _confirmBuffer.time < 1500) {
+      // 確定！
+      handleScanResult(code);
+    } else {
+      // 1回目: バッファに記録
+      _confirmBuffer = { code, time: now };
+      // 仮表示
+      const resultEl = document.getElementById('qrScanResult');
+      if (resultEl) {
+        resultEl.style.display = 'block';
+        resultEl.style.background = '#fef3c7';
+        resultEl.style.color = '#92400e';
+        resultEl.innerHTML = `&#128260; 確認中: <strong>${code}</strong>（もう一度かざしてください）`;
+      }
+    }
+  });
+
+  // Quagga描画をカスタマイズ（検出線を赤色で表示）
+  Quagga.onProcessed((result) => {
+    const drawingCtx = Quagga.canvas.ctx.overlay;
+    const drawingCanvas = Quagga.canvas.dom.overlay;
+    if (!drawingCtx || !drawingCanvas) return;
+    drawingCtx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+    if (result && result.boxes) {
+      result.boxes.filter(b => b !== result.box).forEach(b => {
+        Quagga.ImageDebug.drawPath(b, { x: 0, y: 1 }, drawingCtx, { color: 'rgba(0,180,0,0.4)', lineWidth: 2 });
+      });
+    }
+    if (result && result.box) {
+      Quagga.ImageDebug.drawPath(result.box, { x: 0, y: 1 }, drawingCtx, { color: '#ef4444', lineWidth: 3 });
+    }
+    if (result && result.codeResult && result.codeResult.code) {
+      Quagga.ImageDebug.drawPath(result.line, { x: 'x', y: 'y' }, drawingCtx, { color: '#ef4444', lineWidth: 3 });
+    }
+  });
+}
+
+// ── QRコードモード: BarcodeDetector API ──
+function startQrMode() {
   const video = document.getElementById('qrVideo');
   navigator.mediaDevices.getUserMedia({
-    video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }
+    video: {
+      facingMode: 'environment',
+      width: { ideal: 1280 },
+      height: { ideal: 720 },
+      focusMode: 'continuous'
+    }
   }).then(stream => {
     _scanStream = stream;
     video.srcObject = stream;
     video.play();
-    // カメラ安定後にスキャン開始
-    setTimeout(() => {
-      if (_scanActive) startDetectionLoop();
-    }, 500);
-    // AI fallbackタイマー: 5秒読めなければGeminiに投げる
-    _aiTimer = setTimeout(() => {
-      if (_scanActive && getGeminiKey()) {
-        tryGeminiOCR();
-      } else if (_scanActive && !getGeminiKey()) {
-        showGeminiKeyPrompt();
+
+    // フォーカス設定
+    try {
+      const track = stream.getVideoTracks()[0];
+      if (track.getCapabilities && track.getCapabilities().focusMode) {
+        track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
       }
-    }, 5000);
+    } catch(e) {}
+
+    setTimeout(() => {
+      if (_scanActive) startQrDetectionLoop();
+    }, 500);
   }).catch(err => {
     console.error('Camera error:', err);
-    showToast('カメラの起動に失敗しました: ' + err.message, 'error');
+    showToast('カメラの起動に失敗: ' + err.message, 'error');
     closeQrScanner();
   });
 }
 
-function startDetectionLoop() {
+function startQrDetectionLoop() {
   const video = document.getElementById('qrVideo');
-  const canvas = document.getElementById('qrCanvas');
-  const ctx = canvas.getContext('2d');
 
-  if (hasBarcodeAPI) {
-    // ── Tier 1: BarcodeDetector API ──
-    const detector = new BarcodeDetector({
-      formats: ['qr_code','code_128','code_39','code_93','ean_13','ean_8',
-                'upc_a','upc_e','itf','data_matrix','aztec','pdf417','codabar']
-    });
+  if (typeof BarcodeDetector !== 'undefined') {
+    const detector = new BarcodeDetector({ formats: ['qr_code'] });
     _scanInterval = setInterval(async () => {
       if (!_scanActive || video.readyState < 2) return;
       try {
         const barcodes = await detector.detect(video);
-        if (barcodes.length > 0) {
-          handleScanResult(barcodes[0].rawValue);
-        }
-      } catch(e) { /* ignore frame errors */ }
-    }, 100); // 10fps detection
-
-  } else if (typeof Quagga !== 'undefined') {
-    // ── Tier 2: Quagga2 ──
-    _scanInterval = setInterval(() => {
-      if (!_scanActive || video.readyState < 2) return;
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      ctx.drawImage(video, 0, 0);
-
-      Quagga.decodeSingle({
-        src: canvas.toDataURL('image/jpeg', 0.9),
-        numOfWorkers: 0,
-        locate: true,
-        decoder: {
-          readers: ['code_128_reader','ean_reader','ean_8_reader','code_39_reader',
-                    'code_93_reader','upc_reader','upc_e_reader','i2of5_reader','codabar_reader']
-        }
-      }, result => {
-        if (result && result.codeResult) {
-          handleScanResult(result.codeResult.code);
-        }
-      });
-    }, 300); // Quagga is heavier, 3fps
-
+        if (barcodes.length > 0) handleScanResult(barcodes[0].rawValue);
+      } catch(e) {}
+    }, 150);
   } else {
-    // No decoder available - wait for AI fallback
-    const methodEl = document.getElementById('qrScanMethod');
-    if (methodEl) methodEl.textContent = 'デコーダなし - AI解析を待っています...';
+    // BarcodeDetector非対応 → Quagga2でQRは読めないのでGemini AI待ち
+    document.getElementById('qrScanMethod').textContent = 'QRコード: AI解析待ち（BarcodeDetector非対応）';
   }
 }
 
+// ── 共通: 検出結果ハンドラ ──
 function handleScanResult(text) {
   if (!text || !_scanActive) return;
-  // 重複防止（2秒間同じコード無視）
   const now = Date.now();
   if (text === _lastScanned && now - _lastScannedTime < 2000) return;
   _lastScanned = text;
   _lastScannedTime = now;
 
-  console.log('[Scan] detected:', text);
+  console.log('[Scan] detected:', text, 'mode:', _scanMode);
 
-  // AIタイマーキャンセル
   if (_aiTimer) { clearTimeout(_aiTimer); _aiTimer = null; }
-
-  // バイブレーション
   if (navigator.vibrate) navigator.vibrate(100);
 
   // 成功表示
-  showScanSuccess(text);
+  const resultEl = document.getElementById('qrScanResult');
+  if (resultEl) {
+    const isGS1 = /01\d{14}/.test(text);
+    const jan = parseGS1ToJAN(text);
+    resultEl.style.display = 'block';
+    resultEl.style.background = '#d1fae5';
+    resultEl.style.color = '#065f46';
+    resultEl.innerHTML = isGS1
+      ? `&#9989; GS1-128検出 → JAN: <strong>${jan}</strong>`
+      : `&#9989; 読取成功: <strong>${text.length > 40 ? text.substring(0,40)+'...' : text}</strong>`;
+  }
 
-  // コールバック
   onQrScanned(text);
 
-  // 連続モード＋貸出時はカメラを閉じない
   if (continuousMode && selectedArea && qrTarget === 'lending') {
-    // 開いたまま
+    // 連続モード
   } else {
     closeQrScanner();
   }
 }
 
-function showScanSuccess(text) {
-  const resultEl = document.getElementById('qrScanResult');
-  if (!resultEl) return;
-  const isGS1 = /01\d{14}/.test(text);
-  const jan = parseGS1ToJAN(text);
-  resultEl.style.display = 'block';
-  resultEl.style.background = '#d1fae5';
-  resultEl.style.color = '#065f46';
-  resultEl.innerHTML = isGS1
-    ? `&#9989; GS1-128検出 → JAN: <strong>${jan}</strong>`
-    : `&#9989; 読取成功: <strong>${text.length > 40 ? text.substring(0,40)+'...' : text}</strong>`;
-}
-
 // ── Tier 3: Gemini AI OCR ──
 async function tryGeminiOCR() {
-  const video = document.getElementById('qrVideo');
-  const canvas = document.getElementById('qrCanvas');
-  if (!video || video.readyState < 2) return;
-
   const aiEl = document.getElementById('qrAiStatus');
-  if (aiEl) {
-    aiEl.style.display = 'block';
-    aiEl.innerHTML = '&#129302; AI解析中...カメラ画像をGeminiに送信しています';
-  }
+  if (aiEl) { aiEl.style.display = 'block'; aiEl.innerHTML = '&#129302; AI解析中...カメラ画像をGeminiに送信しています'; }
 
-  // 現在のフレームをキャプチャ
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
-  canvas.getContext('2d').drawImage(video, 0, 0);
+  // フレームキャプチャ
+  const canvas = document.getElementById('qrCanvas');
+  let sourceEl;
+  if (_scanMode === 'barcode') {
+    // Quaggaのvideo要素を取得
+    sourceEl = document.querySelector('#quaggaViewport video');
+  } else {
+    sourceEl = document.getElementById('qrVideo');
+  }
+  if (!sourceEl || sourceEl.readyState < 2) {
+    if (aiEl) { aiEl.innerHTML = '&#9888; カメラ映像が取得できません'; }
+    return;
+  }
+  canvas.width = sourceEl.videoWidth || 1280;
+  canvas.height = sourceEl.videoHeight || 720;
+  canvas.getContext('2d').drawImage(sourceEl, 0, 0);
   const base64 = canvas.toDataURL('image/jpeg', 0.95).split(',')[1];
 
   const apiKey = getGeminiKey();
   if (!apiKey) return;
 
+  const prompt = _scanMode === 'barcode'
+    ? 'この画像に写っているバーコード（GS1-128、CODE128、JAN/EAN）を読み取ってください。バーコード下の数字列（AI+データ）を含めてそのまま返してください。GS1-128の場合は「01」で始まるGTIN部分を優先してください。数字データのみ返してください。読み取れない場合は「NONE」。余計な説明は不要です。'
+    : 'この画像に写っているQRコードを読み取ってください。QRコードに含まれるテキストデータのみを返してください。読み取れない場合は「NONE」。余計な説明は不要です。';
+
   try {
     const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{
-          parts: [
-            { text: 'この画像に写っているバーコード（GS1-128、JAN、QRコード等）を読み取ってください。バーコードの数値データのみを返してください。複数ある場合は改行区切りで。読み取れない場合は「NONE」と返してください。余計な説明は不要です。' },
-            { inline_data: { mime_type: 'image/jpeg', data: base64 } }
-          ]
-        }]
-      })
+      body: JSON.stringify({ contents: [{ parts: [
+        { text: prompt },
+        { inline_data: { mime_type: 'image/jpeg', data: base64 } }
+      ]}]})
     });
-
     const json = await resp.json();
     const aiText = (json.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
     console.log('[Gemini AI] response:', aiText);
 
-    if (aiText && aiText !== 'NONE' && aiText.length > 0) {
-      // 最初の行を取得（複数バーコードの場合）
-      const firstCode = aiText.split('\n')[0].replace(/[^0-9A-Za-z]/g, '');
+    if (aiText && aiText !== 'NONE') {
+      const firstCode = aiText.split('\n')[0].replace(/[^0-9A-Za-z\-]/g, '');
       if (firstCode.length >= 4) {
-        if (aiEl) {
-          aiEl.style.background = '#d1fae5';
-          aiEl.style.color = '#065f46';
-          aiEl.innerHTML = `&#129302; AI読取成功: <strong>${firstCode}</strong>`;
-        }
-        // 少し待ってからコールバック
-        setTimeout(() => {
-          handleScanResult(firstCode);
-        }, 500);
+        if (aiEl) { aiEl.style.background = '#d1fae5'; aiEl.style.color = '#065f46'; aiEl.innerHTML = `&#129302; AI読取成功: <strong>${firstCode}</strong>`; }
+        setTimeout(() => handleScanResult(firstCode), 500);
         return;
       }
     }
-
-    // 読み取れなかった
-    if (aiEl) {
-      aiEl.style.background = '#fee2e2';
-      aiEl.style.color = '#991b1b';
-      aiEl.innerHTML = '&#10006; AI解析でも読み取れませんでした。バーコードをもう少し近づけてください。';
-    }
-    // 5秒後に再試行
-    _aiTimer = setTimeout(() => {
-      if (_scanActive) tryGeminiOCR();
-    }, 5000);
-
+    if (aiEl) { aiEl.style.background = '#fee2e2'; aiEl.style.color = '#991b1b'; aiEl.innerHTML = '&#10006; AI解析でも読み取れません。バーコードを近づけてください。'; }
+    _aiTimer = setTimeout(() => { if (_scanActive) tryGeminiOCR(); }, 5000);
   } catch(err) {
     console.error('[Gemini AI] error:', err);
-    if (aiEl) {
-      aiEl.style.background = '#fee2e2';
-      aiEl.style.color = '#991b1b';
-      aiEl.innerHTML = '&#10006; AI解析エラー: ' + err.message;
-    }
+    if (aiEl) { aiEl.style.background = '#fee2e2'; aiEl.style.color = '#991b1b'; aiEl.innerHTML = '&#10006; AI解析エラー: ' + err.message; }
   }
 }
 
 function showGeminiKeyPrompt() {
   const aiEl = document.getElementById('qrAiStatus');
   if (!aiEl) return;
-  aiEl.style.display = 'block';
-  aiEl.style.background = '#fef3c7';
-  aiEl.style.color = '#92400e';
+  aiEl.style.display = 'block'; aiEl.style.background = '#fef3c7'; aiEl.style.color = '#92400e';
   aiEl.innerHTML = `
     <div style="margin-bottom:8px">&#129302; 読取困難 - Gemini AIで画像解析しますか？</div>
     <div style="display:flex;gap:8px;align-items:center">
       <input type="text" id="geminiKeyInput" class="form-input" placeholder="Gemini APIキーを入力" style="flex:1;font-size:12px;padding:6px 8px">
       <button class="btn btn-sm btn-primary" onclick="saveGeminiKeyAndRetry()" style="white-space:nowrap">設定&解析</button>
     </div>
-    <div style="font-size:11px;margin-top:4px;opacity:.7">
-      <a href="https://aistudio.google.com/apikey" target="_blank" style="color:inherit">Google AI Studio</a>で無料取得可
-    </div>
-  `;
+    <div style="font-size:11px;margin-top:4px;opacity:.7"><a href="https://aistudio.google.com/apikey" target="_blank" style="color:inherit">Google AI Studio</a>で無料取得可</div>`;
 }
-
 function saveGeminiKeyAndRetry() {
   const key = document.getElementById('geminiKeyInput')?.value.trim();
   if (!key) { showToast('APIキーを入力してください','error'); return; }
-  setGeminiKey(key);
-  tryGeminiOCR();
+  setGeminiKey(key); tryGeminiOCR();
 }
 
+// ── コールバック振り分け ──
 function onQrScanned(text) {
   if (qrTarget === 'lending' || qrTarget === 'return') {
-    const cleanedText = cleanScannedId(text);
-    document.getElementById('barcodeInput').value = cleanedText;
+    document.getElementById('barcodeInput').value = cleanScannedId(text);
     processBarcode();
   } else if (qrTarget === 'inspection') {
-    const cleanedText = cleanScannedId(text);
-    document.getElementById('inspEqId').value = cleanedText;
+    document.getElementById('inspEqId').value = cleanScannedId(text);
     lookupInspEquipment();
   } else if (qrTarget === 'order') {
-    const jan = parseGS1ToJAN(text);
-    document.getElementById('orderScanInput').value = jan || text;
+    document.getElementById('orderScanInput').value = parseGS1ToJAN(text) || text;
     processOrderScan();
   } else if (qrTarget === 'inventory') {
-    const jan = parseGS1ToJAN(text);
-    document.getElementById('invBarcodeInput').value = jan || text;
+    document.getElementById('invBarcodeInput').value = parseGS1ToJAN(text) || text;
     processInvBarcode();
   } else if (qrTarget === 'itemSearch') {
-    const jan = parseGS1ToJAN(text);
-    document.getElementById('itemBarcodeInput').value = jan || text;
+    document.getElementById('itemBarcodeInput').value = parseGS1ToJAN(text) || text;
     processItemBarcode();
   } else if (qrTarget === 'itemJan') {
     const jan = parseGS1ToJAN(text);
@@ -5426,14 +5493,18 @@ function onQrScanned(text) {
   }
 }
 
+// ── クリーンアップ ──
 function closeQrScanner() {
   _scanActive = false;
   if (_scanInterval) { clearInterval(_scanInterval); _scanInterval = null; }
   if (_aiTimer) { clearTimeout(_aiTimer); _aiTimer = null; }
-  if (_scanStream) {
-    _scanStream.getTracks().forEach(t => t.stop());
-    _scanStream = null;
+  // Quagga停止
+  if (_quaggaRunning) {
+    try { Quagga.offDetected(); Quagga.offProcessed(); Quagga.stop(); } catch(e) {}
+    _quaggaRunning = false;
   }
+  // Video stream停止
+  if (_scanStream) { _scanStream.getTracks().forEach(t => t.stop()); _scanStream = null; }
   const video = document.getElementById('qrVideo');
   if (video) video.srcObject = null;
   document.getElementById('qrOverlay').classList.remove('show');
