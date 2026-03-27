@@ -475,7 +475,8 @@ a{color:var(--primary);text-decoration:none}
         <div class="barcode-section">
           <h3>機器ID入力</h3>
           <div class="barcode-input-wrap">
-            <input type="text" class="barcode-input" id="inspEqId" placeholder="機器IDを入力またはスキャン...">
+            <input type="text" class="barcode-input" id="inspEqId" placeholder="機器IDを入力またはスキャン..." onkeydown="if(event.key==='Enter'){event.preventDefault();lookupInspEquipment();}">
+            <button class="btn" style="background:rgba(255,255,255,.2);color:#fff" onclick="lookupInspEquipment()">検索</button>
             <button class="btn" style="background:rgba(255,255,255,.2);color:#fff" onclick="startQrScan('inspection')">&#128247;</button>
           </div>
           <div id="inspEqInfo" style="margin-top:10px"></div>
@@ -719,6 +720,7 @@ a{color:var(--primary);text-decoration:none}
         <div style="display:flex;gap:12px;align-items:center">
           <input type="text" id="itemBarcodeInput" class="barcode-input" style="flex:1" placeholder="GS1-128バーコードをスキャン or JANコードを入力..." onkeydown="if(event.key==='Enter'){processItemBarcode()}">
           <button class="btn" style="background:rgba(255,255,255,.2);color:#fff;font-size:15px" onclick="processItemBarcode()">&#128269; 検索</button>
+          <button class="btn" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);font-size:18px" onclick="startQrScan('itemSearch')" title="カメラでスキャン">&#128247;</button>
         </div>
         <div id="itemBarcodeStatus" style="margin-top:8px;font-size:13px;opacity:.85"></div>
       </div>
@@ -756,6 +758,7 @@ a{color:var(--primary);text-decoration:none}
         <div style="display:flex;gap:12px;align-items:center">
           <input type="text" id="invBarcodeInput" class="barcode-input" style="flex:1" placeholder="GS1-128 / JANコードをスキャン..." onkeydown="if(event.key==='Enter'){processInvBarcode()}">
           <button class="btn" style="background:rgba(255,255,255,.2);color:#fff" onclick="processInvBarcode()">&#128269; 検索</button>
+          <button class="btn" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3)" onclick="startQrScan('inventory')" title="カメラでスキャン">&#128247;</button>
         </div>
         <div id="invBarcodeStatus" style="margin-top:8px;font-size:13px;opacity:.85"></div>
       </div>
@@ -968,14 +971,18 @@ a{color:var(--primary);text-decoration:none}
 
 <!-- QR Scanner Modal -->
 <div class="modal-overlay" id="qrOverlay" onclick="if(event.target===this)closeQrScanner()">
-  <div class="modal" style="max-width:480px">
+  <div class="modal" style="max-width:520px">
     <div class="modal-header">
-      <h3>QR / バーコード スキャン</h3>
+      <h3 id="qrScanTitle">QR / バーコード スキャン</h3>
       <button class="modal-close" onclick="closeQrScanner()">&times;</button>
     </div>
-    <div class="modal-body">
-      <div id="qrReader" class="qr-scanner-area"></div>
-      <p style="text-align:center;margin-top:12px;color:var(--gray-500);font-size:13px">QRコード・GS1-128・JANバーコードをカメラに向けてください</p>
+    <div class="modal-body" style="padding:8px">
+      <div id="qrReader" class="qr-scanner-area" style="min-height:300px"></div>
+      <div style="text-align:center;margin-top:10px">
+        <p style="color:var(--gray-500);font-size:13px;margin:0">枠内にコードを合わせてください</p>
+        <p style="color:var(--gray-400);font-size:11px;margin:4px 0 0">QRコード / GS1-128 / JAN / CODE128 / DataMatrix 対応</p>
+        <div id="qrScanResult" style="display:none;margin-top:8px;padding:8px 12px;border-radius:8px;font-size:13px;font-weight:600"></div>
+      </div>
       <div id="qrContinuousStatus" style="display:none;text-align:center;margin-top:8px;padding:8px;background:#065f46;color:#6ee7b7;border-radius:8px;font-size:13px;font-weight:600"></div>
     </div>
   </div>
@@ -2359,8 +2366,16 @@ async function pullFromSheets() {
           r.onsuccess = () => res(r.result);
           r.onerror = () => res(null);
         });
-        const merged = existing ? { ...existing, ...item } : item;
-        store.put(merged);
+        if (existing) {
+          // Sheets側の空文字でローカルの値を上書きしない
+          const filtered = {};
+          for (const [k, v] of Object.entries(item)) {
+            if (v !== '' && v !== null && v !== undefined) filtered[k] = v;
+          }
+          store.put({ ...existing, ...filtered });
+        } else {
+          store.put(item);
+        }
       }
       await new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = rej; });
       totalCount += sheetData.length;
@@ -3257,7 +3272,13 @@ async function processBarcode() {
     return;
   }
 
-  // If already lent out → show return confirmation modal (not just error)
+  // デバッグ: スキャン結果を画面上部に表示（問題特定用）
+  const debugArea = document.getElementById('barcodeStatus');
+  if (debugArea) {
+    debugArea.textContent = `[DEBUG] ID:${eq.id} status:${eq.status} lending:${eq.lending} → ${(eq.status==='貸出中'||eq.lending==='貸出中')?'返却':'貸出'}`;
+  }
+
+  // If already lent out → show return confirmation modal
   if (eq.status === '貸出中' || eq.lending === '貸出中') {
     showReturnConfirmModal(eq);
     input.value = '';
@@ -3664,6 +3685,16 @@ function filterEquipment() {
 // ===================== EQUIPMENT DETAIL MODAL =====================
 function showEquipmentModal(eq) {
   if (!eq) return;
+
+  // 貸出中判定（status, lending, location のいずれかで判断）
+  const isLentOut = eq.status === '貸出中' || eq.lending === '貸出中';
+
+  // 貸出中なら返却モーダルに直接転送
+  if (isLentOut) {
+    showReturnConfirmModal(eq);
+    return;
+  }
+
   document.getElementById('modalTitle').textContent = `${eq.id} - 機器詳細`;
   document.getElementById('modalBody').innerHTML = `
     <div class="detail-grid">
@@ -3679,13 +3710,12 @@ function showEquipmentModal(eq) {
       <div class="detail-item"><div class="label">現在地</div><div class="value" style="font-weight:700">${eq.location || '-'}</div></div>
       <div class="detail-item"><div class="label">廃棄</div><div class="value">${eq.discard || '-'}</div></div>
     </div>
+    <div style="margin-top:12px;padding:10px;background:var(--gray-50);border-radius:8px;text-align:center;font-size:13px;color:var(--gray-500)">
+      &#9432; 貸出するにはエリアを選択してからスキャンしてください
+    </div>
   `;
 
-  let footerHTML = '<button class="btn btn-outline" onclick="closeModal()">閉じる</button>';
-  if (eq.lending === '貸出中' || eq.status === '貸出中') {
-    footerHTML += `<button class="btn btn-success" onclick="closeModal();executeReturn(allEquipment.find(e=>e.id==='${eq.id}')).then(()=>{if(currentScreen==='status')renderStatusScreen()})">&#8617; 返却</button>`;
-  }
-  document.getElementById('modalFooter').innerHTML = footerHTML;
+  document.getElementById('modalFooter').innerHTML = '<button class="btn btn-outline" onclick="closeModal()">閉じる</button>';
   openModal();
 }
 
@@ -4081,65 +4111,89 @@ function detectInspType(eqId) {
 }
 
 function lookupInspEquipment() {
-  const id = document.getElementById('inspEqId').value.trim();
+  const rawId = document.getElementById('inspEqId').value.trim();
   const info = document.getElementById('inspEqInfo');
-  if (!id) { info.innerHTML = ''; return; }
+  if (!rawId) { info.innerHTML = ''; return; }
+
+  // cleanScannedIdがあれば使う
+  const id = typeof cleanScannedId === 'function' ? cleanScannedId(rawId) : rawId.toUpperCase();
+  document.getElementById('inspEqId').value = id;
 
   const eq = allEquipment.find(e => e.id.toUpperCase() === id.toUpperCase());
+  if (!eq) {
+    // 部分一致も試す
+    const partial = allEquipment.find(e => id.includes(e.id.toUpperCase()));
+    if (partial) {
+      document.getElementById('inspEqId').value = partial.id;
+      return lookupInspEquipment(); // 再帰で正しいIDで処理
+    }
+  }
+
   const typeKey = detectInspType(id);
 
   if (eq) {
-    info.innerHTML = `<div style="background:rgba(255,255,255,.2);border-radius:8px;padding:8px 12px;font-size:13px">
-      <strong>${eq.name}</strong> | ${eq.model || ''} | ${eq.category || ''}
-      ${typeKey ? ' | <span style="font-weight:700">'+INSPECTION_TYPES[typeKey].name+'</span>' : ''}
+    info.innerHTML = `<div style="background:rgba(255,255,255,.15);border-radius:8px;padding:10px 14px;font-size:13px;border:1px solid rgba(255,255,255,.2)">
+      <div style="font-weight:700;font-size:15px">${eq.name}</div>
+      <div style="margin-top:2px">${eq.model || ''} | ${eq.category || ''}
+      ${typeKey ? ' | <span style="color:#86efac;font-weight:700">'+INSPECTION_TYPES[typeKey].name+'</span>' : ''}</div>
     </div>`;
-    if (typeKey) {
-      currentInspType = typeKey;
-      currentInspEqId = id;
-      showInspectionForm(id, typeKey);
-    } else {
-      info.innerHTML += '<div style="color:#fca5a5;font-size:12px;margin-top:4px">この機器IDに対応する点検タイプが見つかりません。下のタイプを選択してください。</div>';
-    }
   } else {
-    if (typeKey) {
-      info.innerHTML = `<div style="background:rgba(255,255,255,.2);border-radius:8px;padding:8px 12px;font-size:13px">
-        機器マスターに未登録 | <span style="font-weight:700">${INSPECTION_TYPES[typeKey].name}</span>として点検
-      </div>`;
-      currentInspType = typeKey;
-      currentInspEqId = id;
-      showInspectionForm(id, typeKey);
-    } else {
-      info.innerHTML = '<div style="color:#fca5a5;font-size:12px">機器が見つかりません。機器タイプを選択してください。</div>';
-    }
+    info.innerHTML = `<div style="background:rgba(255,200,100,.15);border-radius:8px;padding:10px 14px;font-size:13px;border:1px solid rgba(255,200,100,.3)">
+      機器マスターに未登録のID: <strong>${id}</strong>
+      ${typeKey ? ' | <span style="color:#86efac;font-weight:700">'+INSPECTION_TYPES[typeKey].name+'として点検可能</span>' : ''}
+    </div>`;
+  }
+
+  if (typeKey) {
+    currentInspType = typeKey;
+    currentInspEqId = id;
+    // タイプカードをハイライト
+    document.querySelectorAll('.insp-type-card').forEach(c => c.classList.remove('selected'));
+    const cards = document.querySelectorAll('.insp-type-card');
+    const keys = Object.keys(INSPECTION_TYPES);
+    const idx = keys.indexOf(typeKey);
+    if (idx >= 0 && cards[idx]) cards[idx].classList.add('selected');
+    // フォーム表示
+    showInspectionForm(id, typeKey);
+  } else {
+    info.innerHTML += '<div style="color:#fca5a5;font-size:12px;margin-top:6px">&#9888; 対応する点検タイプが自動検出できません。下のタイプを選択してください。</div>';
+    // タイプグリッドまでスクロール
+    document.getElementById('inspTypeGrid').scrollIntoView({behavior:'smooth', block:'center'});
   }
 }
 
 function selectInspType(typeKey) {
   // Highlight selected card
   document.querySelectorAll('.insp-type-card').forEach(c => c.classList.remove('selected'));
-  event.currentTarget.classList.add('selected');
+  if (event && event.currentTarget) event.currentTarget.classList.add('selected');
 
-  // Show equipment list for this type
+  currentInspType = typeKey;
+
+  // 機器IDが入力済みならすぐにフォームを表示
+  const eqId = document.getElementById('inspEqId').value.trim();
+  if (eqId) {
+    currentInspEqId = eqId;
+    showInspectionForm(eqId, typeKey);
+    return;
+  }
+
+  // Show equipment list for this type (使用可能機器のみ)
   const config = INSPECTION_TYPES[typeKey];
   const matching = allEquipment.filter(e => {
+    if (!isEquipmentActive(e)) return false;
     const upper = e.id.toUpperCase();
     return config.idPatterns.some(p => upper.includes(p.toUpperCase()));
   });
 
   if (matching.length === 0) {
-    // No equipment found, just open form with manual ID entry
-    const eqId = document.getElementById('inspEqId').value.trim();
-    if (eqId) {
-      showInspectionForm(eqId, typeKey);
-    } else {
-      showToast(`${config.name}の機器が登録されていません。機器IDを入力してください。`, 'info');
-    }
+    showToast(`${config.name}の機器が登録されていません。機器IDを入力してください。`, 'info');
+    document.getElementById('inspEqId').focus();
     return;
   }
 
   const panel = document.getElementById('inspEqListPanel');
   const body = document.getElementById('inspEqListBody');
-  document.getElementById('inspEqListTitle').textContent = config.name + ' 機器一覧';
+  document.getElementById('inspEqListTitle').textContent = config.name + ' 機器一覧 (' + matching.length + '台)';
   body.innerHTML = matching.map(e =>
     `<div class="insp-eq-item" onclick="pickInspEquipment('${e.id}','${typeKey}')">
       <div class="eq-info">
@@ -4178,6 +4232,13 @@ async function showInspectionForm(equipmentId, typeKey) {
   currentInspEqId = equipmentId;
 
   const eq = allEquipment.find(e => e.id.toUpperCase() === equipmentId.toUpperCase());
+
+  // 使用不可機器はブロック
+  if (eq && !isEquipmentActive(eq)) {
+    const reason = eq.discard || (eq.discardDate ? '廃棄済' : '使用不可');
+    showToast(`${eq.name || equipmentId}（${eq.id}）は「${reason}」のため点検登録できません`, 'error');
+    return;
+  }
   const staffList = await dbGetAll('staff');
   const now = new Date();
   const dateStr = now.toISOString().slice(0,10);
@@ -4272,8 +4333,12 @@ async function showInspectionForm(equipmentId, typeKey) {
 
   document.getElementById('inspFormTitle').textContent = config.name + ' 点検';
   document.getElementById('inspFormBody').innerHTML = html;
-  document.getElementById('inspFormPanel').style.display = '';
+  document.getElementById('inspFormPanel').style.display = 'block';
   document.getElementById('inspEqListPanel').style.display = 'none';
+  // フォームまでスクロール
+  setTimeout(() => {
+    document.getElementById('inspFormPanel').scrollIntoView({behavior:'smooth', block:'start'});
+  }, 100);
 }
 
 function toggleInspBulkCheck() {
@@ -4734,7 +4799,14 @@ function repairEqIdLookup() {
   const eq = allEquipment.find(e => e.id === eqId);
   if (eq) {
     infoDiv.style.display = 'block';
-    infoDiv.innerHTML = `&#9989; <strong>${eq.name}</strong> (${eq.model || '-'}) / ${eq.dept || '-'}`;
+    if (!isEquipmentActive(eq)) {
+      const reason = eq.discard || (eq.discardDate ? '廃棄済' : '使用不可');
+      infoDiv.innerHTML = `&#9888; <strong style="color:var(--danger)">${eq.name}</strong>（${reason}）- 修理登録不可`;
+      infoDiv.style.background = '#fff5f5';
+    } else {
+      infoDiv.innerHTML = `&#9989; <strong>${eq.name}</strong> (${eq.model || '-'}) / ${eq.dept || '-'}`;
+      infoDiv.style.background = '';
+    }
   } else {
     infoDiv.style.display = eqId.length >= 2 ? 'block' : 'none';
     infoDiv.innerHTML = '&#9888; 機器が見つかりません';
@@ -4834,6 +4906,13 @@ async function submitRepair(editId) {
   if (!receptionDate) { showToast('受付日を入力してください', 'error'); return; }
 
   const eq = allEquipment.find(e => e.id === eqId);
+
+  // 使用不可機器はブロック
+  if (eq && !isEquipmentActive(eq)) {
+    const reason = eq.discard || (eq.discardDate ? '廃棄済' : '使用不可');
+    showToast(`${eq.name}（${eq.id}）は「${reason}」のため修理登録できません`, 'error');
+    return;
+  }
 
   const repair = {
     repairId: editId || generateId(),
@@ -5055,6 +5134,20 @@ function startQrScan(target) {
   qrTarget = target;
   document.getElementById('qrOverlay').classList.add('show');
 
+  // タイトル更新
+  const titles = {
+    lending: '機器ID スキャン（貸出）', return: '機器ID スキャン（返却）',
+    inspection: '機器ID スキャン（点検）', order: 'バーコード スキャン（発注）',
+    inventory: 'バーコード スキャン（入出庫）', itemSearch: 'バーコード スキャン（物品検索）',
+    itemJan: 'バーコード スキャン（物品マスター）'
+  };
+  const titleEl = document.getElementById('qrScanTitle');
+  if (titleEl) titleEl.textContent = titles[target] || 'QR / バーコード スキャン';
+
+  // 前回結果をクリア
+  const resultEl = document.getElementById('qrScanResult');
+  if (resultEl) resultEl.style.display = 'none';
+
   if (typeof Html5Qrcode === 'undefined') {
     showToast('QRスキャナーライブラリが読み込めませんでした。カメラでスキャンするにはインターネット接続が必要です。', 'error');
     return;
@@ -5076,18 +5169,39 @@ function startQrScan(target) {
     Html5QrcodeSupportedFormats.PDF_417,
     Html5QrcodeSupportedFormats.CODABAR
   ];
-  qrScanner = new Html5Qrcode('qrReader', { formatsToSupport: supportedFormats });
+  qrScanner = new Html5Qrcode('qrReader', {
+    formatsToSupport: supportedFormats,
+    verbose: false
+  });
   let lastScannedCode = '';
   let lastScannedTime = 0;
+
+  // バーコード用は横長、QR用は正方形に近い読取枠
+  const isBarcode = (target === 'inventory' || target === 'order' || target === 'itemJan');
+  const readerWidth = Math.min(window.innerWidth - 40, 500);
+  const qrboxWidth = Math.min(readerWidth - 20, isBarcode ? 350 : 280);
+  const qrboxHeight = isBarcode ? 120 : 280;
+
   qrScanner.start(
     { facingMode: 'environment' },
-    { fps: 15, qrbox: { width: 300, height: 200 } },
+    {
+      fps: 30,                        // 高FPSで検出機会を増やす
+      qrbox: { width: qrboxWidth, height: qrboxHeight },
+      aspectRatio: isBarcode ? 2.0 : 1.0,  // バーコードは横長
+      disableFlip: false,
+      experimentalFeatures: {
+        useBarCodeDetectorIfSupported: true  // ブラウザ内蔵BarcodeDetector API優先
+      }
+    },
     (text) => {
       // 連続モード: 同じコードの連続読み取りを防止（2秒間）
       const now = Date.now();
       if (text === lastScannedCode && now - lastScannedTime < 2000) return;
       lastScannedCode = text;
       lastScannedTime = now;
+
+      // バイブレーションフィードバック（対応端末のみ）
+      if (navigator.vibrate) navigator.vibrate(100);
 
       onQrScanned(text);
       // 連続モード＋貸出時はカメラを閉じない
@@ -5105,18 +5219,54 @@ function startQrScan(target) {
 }
 
 function onQrScanned(text) {
-  const cleanedText = cleanScannedId(text);
-  console.log('[QR Scan] raw:', text, '→ cleaned:', cleanedText);
+  console.log('[QR Scan] raw:', text);
+
+  // 画面にスキャン成功表示
+  const resultEl = document.getElementById('qrScanResult');
+  if (resultEl) {
+    const isGS1 = /01\d{14}/.test(text);
+    const jan = parseGS1ToJAN(text);
+    resultEl.style.display = 'block';
+    resultEl.style.background = '#d1fae5';
+    resultEl.style.color = '#065f46';
+    resultEl.innerHTML = isGS1
+      ? `&#9989; GS1-128検出 → JAN: <strong>${jan}</strong>`
+      : `&#9989; 読取成功: <strong>${text.length > 30 ? text.substring(0,30)+'...' : text}</strong>`;
+  }
 
   if (qrTarget === 'lending' || qrTarget === 'return') {
+    const cleanedText = cleanScannedId(text);
     document.getElementById('barcodeInput').value = cleanedText;
     processBarcode();
   } else if (qrTarget === 'inspection') {
+    const cleanedText = cleanScannedId(text);
     document.getElementById('inspEqId').value = cleanedText;
     lookupInspEquipment();
   } else if (qrTarget === 'order') {
-    document.getElementById('orderScanInput').value = cleanedText;
+    // 発注: GS1-128 → JAN抽出
+    const jan = parseGS1ToJAN(text);
+    document.getElementById('orderScanInput').value = jan || text;
     processOrderScan();
+  } else if (qrTarget === 'inventory') {
+    // 入出庫: GS1-128 → JAN抽出
+    const jan = parseGS1ToJAN(text);
+    document.getElementById('invBarcodeInput').value = jan || text;
+    processInvBarcode();
+  } else if (qrTarget === 'itemSearch') {
+    // 物品マスター検索: GS1-128 → JAN抽出して検索
+    const jan = parseGS1ToJAN(text);
+    document.getElementById('itemBarcodeInput').value = jan || text;
+    processItemBarcode();
+  } else if (qrTarget === 'itemJan') {
+    // 物品マスター編集: GS1-128 → JAN抽出してフォームに入力
+    const jan = parseGS1ToJAN(text);
+    const janInput = document.getElementById('editItemJan');
+    const scanInput = document.getElementById('editItemScanCode');
+    if (janInput) {
+      janInput.value = jan || text;
+      editItemJanParse(janInput);
+    }
+    if (scanInput) scanInput.value = text;
   }
 }
 
@@ -5601,13 +5751,20 @@ async function saveStaff(isNew) {
     if (existing) { showToast('この社員IDは既に登録されています', 'error'); return; }
   }
 
-  await dbPut('staff', {
+  const staffData = {
     staffId: id,
     name: name,
     dept: document.getElementById('editStaffDept').value,
     email: document.getElementById('editStaffEmail').value.trim(),
     role: document.getElementById('editStaffRole').value
-  });
+  };
+
+  await dbPut('staff', staffData);
+
+  // Google Sheetsへ同期
+  if (syncEnabled) {
+    gasPost('saveStaff', { data: staffData }).catch(err => console.warn('Staff sync failed:', err));
+  }
 
   closeModal();
   renderStaffList();
@@ -5620,6 +5777,12 @@ async function deleteStaff(staffId) {
   const tx = db.transaction('staff', 'readwrite');
   tx.objectStore('staff').delete(staffId);
   await new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = rej; });
+
+  // Google Sheetsから削除
+  if (syncEnabled) {
+    gasPost('deleteStaff', { id: staffId }).catch(err => console.warn('Staff delete sync failed:', err));
+  }
+
   renderStaffList();
   await populateStaffDropdown();
   showToast('スタッフを削除しました', 'info');
@@ -5695,15 +5858,21 @@ async function saveDept(deptId, isNew) {
   if (!name) { showToast('部署名を入力してください', 'error'); return; }
 
   const id = isNew ? 'D' + Date.now().toString(36) : deptId;
-  await dbPut('departments', {
+  const deptData = {
     deptId: id,
     name: name,
     description: document.getElementById('editDeptDesc').value.trim()
-  });
+  };
+  await dbPut('departments', deptData);
+
+  // Google Sheetsへ同期
+  if (syncEnabled) {
+    gasPost('saveDepartment', { data: deptData }).catch(err => console.warn('Dept sync failed:', err));
+  }
 
   closeModal();
   renderDeptList();
-  await refreshLendingAreas(); // 貸出画面のエリアも更新
+  await refreshLendingAreas();
   showToast(isNew ? `${name} を追加しました` : `${name} を更新しました`, 'success');
 }
 
@@ -5712,8 +5881,14 @@ async function deleteDept(deptId) {
   const tx = db.transaction('departments', 'readwrite');
   tx.objectStore('departments').delete(deptId);
   await new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = rej; });
+
+  // Google Sheetsから削除
+  if (syncEnabled) {
+    gasPost('deleteDepartment', { id: deptId }).catch(err => console.warn('Dept delete sync failed:', err));
+  }
+
   renderDeptList();
-  await refreshLendingAreas(); // 貸出画面のエリアも更新
+  await refreshLendingAreas();
   showToast('部署を削除しました', 'info');
 }
 
@@ -6053,6 +6228,7 @@ async function showItemEditModal(itemId, prefillJan) {
         <label class="form-label">JANコード <span style="color:var(--danger)">*</span></label>
         <div style="display:flex;gap:8px">
           <input type="text" class="form-input" id="editItemJan" value="${v('janCode')}" placeholder="GS1-128をスキャン or 手入力" style="flex:1" oninput="editItemJanParse(this)">
+          <button class="btn btn-sm btn-outline" onclick="startQrScan('itemJan')" title="カメラでスキャン" style="font-size:16px">&#128247;</button>
           <button class="btn btn-sm btn-outline" onclick="clearAndFocusJan()" title="スキャンモード" style="font-size:16px">&#128274;</button>
         </div>
         <div id="editItemJanInfo" style="font-size:11px;color:var(--gray-400);margin-top:2px"></div>
