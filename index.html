@@ -145,6 +145,12 @@ a{color:var(--primary);text-decoration:none}
 .toast-info{background:var(--primary)}
 @keyframes toastIn{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+/* Loading overlay */
+.loading-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(255,255,255,.7);z-index:9999;justify-content:center;align-items:center;flex-direction:column;gap:12px}
+.loading-overlay.show{display:flex}
+.loading-spinner{width:40px;height:40px;border:4px solid var(--gray-200);border-top:4px solid var(--primary);border-radius:50%;animation:spin .8s linear infinite}
+.loading-text{font-size:15px;color:var(--gray-600);font-weight:500}
+@keyframes spin{to{transform:rotate(360deg)}}
 
 /* Lending confirm */
 .lending-confirm{text-align:center;padding:20px}
@@ -281,7 +287,7 @@ a{color:var(--primary);text-decoration:none}
       <span class="icon">&#128205;</span>貸出状況
     </div>
     <div class="nav-item" data-screen="equipment" onclick="showScreen('equipment')">
-      <span class="icon">&#128295;</span>機器一覧
+      <span class="icon">&#128295;</span>機器一覧（使用可能）
     </div>
     <div class="nav-section">管理</div>
     <div class="nav-item" data-screen="inspection" onclick="showScreen('inspection')">
@@ -1001,6 +1007,12 @@ a{color:var(--primary);text-decoration:none}
   </div>
 </div>
 
+<!-- Loading Overlay -->
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="loading-spinner"></div>
+  <div class="loading-text">表示中です。しばらくお待ちください。</div>
+</div>
+
 <!-- Modal -->
 <div class="modal-overlay" id="modalOverlay" onclick="if(event.target===this)closeModal()">
   <div class="modal" id="modal">
@@ -1153,7 +1165,6 @@ const INITIAL_EQUIPMENT = [
 {id:'DE-AA004',category:'麻酔器',name:'ﾒﾗ吸入麻酔ｼｽﾃﾑPIXYSⅡ',model:'PIXYSⅡ',serial:'180041',dept:'CE',manufacturer:'泉光医科工業株式会社',status:'',lending:'貸出中',location:'手術室',storage:'手術室3',discard:''},
 {id:'CE-PU207',category:'パルスオキシメーター',name:'GLOX パルスオキシメーター',model:'YX301',serial:'2.02202E+12',dept:'CE',manufacturer:'株式会社グロックス',status:'',lending:'',location:'',storage:'4階西病棟',discard:''},
 {id:'CE-PU206',category:'パルスオキシメーター',name:'GLOX パルスオキシメーター',model:'YX301',serial:'2.02202E+12',dept:'CE',manufacturer:'株式会社グロックス',status:'',lending:'',location:'',storage:'3階西病棟',discard:''},
-{id:'CE-BM002',category:'ベッドサイドモニタ',name:'生体情報モニタ BP-608 EvolutionⅢ',model:'BP-608EV',serial:'50442',dept:'CE',manufacturer:'フクダコーリン株式会社',status:'',lending:'',location:'',storage:'手術室1',discard:'廃棄待ち'},
 {id:'CE-PU205',category:'パルスオキシメーター',name:'GLOX パルスオキシメーター',model:'YX301',serial:'2.02202E+12',dept:'CE',manufacturer:'株式会社グロックス',status:'',lending:'',location:'',storage:'ME室',discard:''},
 {id:'CE-PU204',category:'パルスオキシメーター',name:'GLOX パルスオキシメーター',model:'YX301',serial:'2.02202E+12',dept:'CE',manufacturer:'株式会社グロックス',status:'',lending:'',location:'',storage:'ME室',discard:''},
 {id:'CE-PU203',category:'パルスオキシメーター',name:'GLOX パルスオキシメーター',model:'YX301',serial:'2.02202E+12',dept:'CE',manufacturer:'株式会社グロックス',status:'',lending:'',location:'',storage:'ME室',discard:''},
@@ -1219,12 +1230,9 @@ const INITIAL_EQUIPMENT = [
 {id:'CE-PU152',category:'パルスオキシメーター',name:'GLOX パルスオキシメーター',model:'YX301',serial:'2.02202E+12',dept:'CE',manufacturer:'株式会社グロックス',status:'',lending:'',location:'',storage:'ME室',discard:''},
 {id:'CE-PU151',category:'パルスオキシメーター',name:'GLOX パルスオキシメーター',model:'YX301',serial:'2.02202E+12',dept:'CE',manufacturer:'株式会社グロックス',status:'',lending:'貸出中',location:'4階西病棟',storage:'ME室',discard:''},
 {id:'CE-PU150',category:'パルスオキシメーター',name:'GLOX パルスオキシメーター',model:'YX301',serial:'2.02202E+12',dept:'CE',manufacturer:'株式会社グロックス',status:'',lending:'',location:'',storage:'ME室',discard:''},
-{id:'CE-BM021',category:'ベッドサイドモニタ',name:'生体情報モニタ BP-608 EvolutionⅡ',model:'BP-608EV',serial:'10138',dept:'CE',manufacturer:'フクダコーリン株式会社',status:'',lending:'',location:'',storage:'手術室3',discard:'廃棄待ち'},
 {id:'CE-PU149',category:'パルスオキシメーター',name:'GLOX パルスオキシメーター',model:'YX301',serial:'2.02202E+12',dept:'CE',manufacturer:'株式会社グロックス',status:'',lending:'',location:'',storage:'ME室',discard:''},
-{id:'DE-MR001',category:'呼吸器加温加湿器',name:'呼吸器加温加湿器',model:'PMH7000',serial:'770011',dept:'CE',manufacturer:'パシフィックメディコ株式会社',status:'',lending:'',location:'',storage:'ME室',discard:'廃棄'},
 {id:'CE-PU116',category:'パルスオキシメーター',name:'パルスフロー',model:'706-89133',serial:'XBU00SB471064',dept:'CE',manufacturer:'歯愛メディカル',status:'',lending:'',location:'',storage:'リハビリ室',discard:'廃棄'},
 {id:'CE-PU148',category:'パルスオキシメーター',name:'GLOX パルスオキシメーター',model:'YX301',serial:'2.02202E+12',dept:'CE',manufacturer:'株式会社グロックス',status:'',lending:'',location:'',storage:'ME室',discard:''},
-{id:'DE-MR004',category:'呼吸器加温加湿器',name:'呼吸器加温加湿器',model:'PMH7000',serial:'770017',dept:'CE',manufacturer:'パシフィックメディコ株式会社',status:'',lending:'',location:'',storage:'ME室',discard:'廃棄'},
 {id:'CE-PU147',category:'パルスオキシメーター',name:'GLOX パルスオキシメーター',model:'YX301',serial:'2.02202E+12',dept:'CE',manufacturer:'株式会社グロックス',status:'',lending:'保管中',location:'ME室',storage:'ME室',discard:''},
 {id:'CE-PU146',category:'パルスオキシメーター',name:'GLOX パルスオキシメーター',model:'YX301',serial:'2.02202E+12',dept:'CE',manufacturer:'株式会社グロックス',status:'',lending:'保管中',location:'ME室',storage:'ME室',discard:''},
 {id:'3W-PU112',category:'パルスオキシメーター',name:'パルスフロー',model:'706-89133',serial:'XBU00SB471060',dept:'3F病棟西',manufacturer:'歯愛メディカル',status:'',lending:'',location:'',storage:'ME室',discard:''},
@@ -1289,7 +1297,6 @@ const INITIAL_EQUIPMENT = [
 {id:'CE-PU087',category:'パルスオキシメーター',name:'パルスフロー',model:'706-89133',serial:'XBU00SB471035',dept:'CE',manufacturer:'歯愛メディカル',status:'',lending:'貸出中',location:'4階西病棟',storage:'ME室',discard:''},
 {id:'CE-PU086',category:'パルスオキシメーター',name:'パルスフロー',model:'706-89133',serial:'XBU00SB471034',dept:'CE',manufacturer:'歯愛メディカル',status:'',lending:'貸出中',location:'4階西病棟',storage:'ME室',discard:''},
 {id:'CE-PU085',category:'パルスオキシメーター',name:'パルスフロー',model:'706-89133',serial:'XBU00SB471033',dept:'CE',manufacturer:'歯愛メディカル',status:'',lending:'',location:'',storage:'ME室',discard:''},
-{id:'CE-EL001',category:'体外式衝撃波結石破砕装置',name:'リトクラスト',model:'840-100',serial:'',dept:'CE',manufacturer:'ボストンサイエンティフィック',status:'',lending:'',location:'',storage:'手術室',discard:'廃棄'},
 {id:'CE-PU084',category:'パルスオキシメーター',name:'パルスフロー',model:'706-89133',serial:'XBU00SB471032',dept:'CE',manufacturer:'歯愛メディカル',status:'',lending:'貸出中',location:'4階西病棟',storage:'ME室',discard:''},
 {id:'CE-PU083',category:'パルスオキシメーター',name:'パルスフロー',model:'706-89133',serial:'XBU00SB471031',dept:'CE',manufacturer:'歯愛メディカル',status:'',lending:'貸出中',location:'3階西病棟',storage:'ME室',discard:''},
 {id:'CE-PU082',category:'パルスオキシメーター',name:'パルスフロー',model:'706-89133',serial:'XBU00SB471030',dept:'4F病棟東',manufacturer:'歯愛メディカル',status:'',lending:'貸出中',location:'3階西病棟',storage:'ME室',discard:''},
@@ -1302,7 +1309,6 @@ const INITIAL_EQUIPMENT = [
 {id:'CE-PU075',category:'パルスオキシメーター',name:'パルスフロー',model:'706-89133',serial:'XBU00SB471023',dept:'CE',manufacturer:'歯愛メディカル',status:'',lending:'',location:'',storage:'ME室',discard:''},
 {id:'CE-PU074',category:'パルスオキシメーター',name:'パルスフロー',model:'706-89133',serial:'XBU00SB471022',dept:'CE',manufacturer:'歯愛メディカル',status:'',lending:'',location:'',storage:'ME室',discard:''},
 {id:'CE-PU073',category:'パルスオキシメーター',name:'パルスフロー',model:'706-89133',serial:'XBU00SB471021',dept:'CE',manufacturer:'歯愛メディカル',status:'',lending:'',location:'',storage:'ME室',discard:''},
-{id:'4W-PU003',category:'パルスオキシメーター',name:'マシモSETフィンガーパルスオキシメータ マイティサット',model:'MightySat',serial:'4000199237',dept:'4F病棟西',manufacturer:'マシモジャパン',status:'',lending:'',location:'',storage:'4FW',discard:'廃棄'},
 {id:'CE-PU072',category:'パルスオキシメーター',name:'パルスフロー',model:'706-89133',serial:'XBU00SB471020',dept:'CE',manufacturer:'歯愛メディカル',status:'',lending:'',location:'',storage:'ME室',discard:''},
 {id:'CE-PU071',category:'パルスオキシメーター',name:'パルスフロー',model:'706-89133',serial:'XBU00SB471019',dept:'4F病棟西',manufacturer:'歯愛メディカル',status:'',lending:'',location:'',storage:'ME室',discard:''},
 {id:'CE-PU070',category:'パルスオキシメーター',name:'パルスフロー',model:'706-89133',serial:'XBU00SB471018',dept:'4F病棟西',manufacturer:'歯愛メディカル',status:'',lending:'',location:'',storage:'ME室',discard:''},
@@ -1316,35 +1322,24 @@ const INITIAL_EQUIPMENT = [
 {id:'CE-PU062',category:'パルスオキシメーター',name:'パルスフロー',model:'706-89133',serial:'XBU00SB471010',dept:'4F病棟西',manufacturer:'歯愛メディカル',status:'',lending:'',location:'',storage:'ME室',discard:''},
 {id:'CE-PU061',category:'パルスオキシメーター',name:'パルスフロー',model:'706-89133',serial:'XBU00SB471009',dept:'4F病棟西',manufacturer:'歯愛メディカル',status:'',lending:'',location:'',storage:'ME室',discard:''},
 {id:'CE-PU060',category:'パルスオキシメーター',name:'パルスフロー',model:'706-89133',serial:'XBU00SB471008',dept:'CE',manufacturer:'歯愛メディカル',status:'',lending:'',location:'',storage:'ME室',discard:''},
-{id:'4W-PU005',category:'パルスオキシメーター',name:'マシモSETフィンガーパルスオキシメータ マイティサット',model:'MightySat',serial:'4000123052',dept:'4F病棟西',manufacturer:'マシモジャパン',status:'',lending:'',location:'',storage:'4FW',discard:'廃棄'},
 {id:'CE-PU059',category:'パルスオキシメーター',name:'パルスフロー',model:'706-89133',serial:'XBU00SB471007',dept:'CE',manufacturer:'歯愛メディカル',status:'',lending:'',location:'',storage:'ME室',discard:''},
-{id:'DE-BS002',category:'脳波スペクタクル解析装置',name:'BISコンプリートモニタ',model:'186－1046',serial:'VT44970',dept:'CE',manufacturer:'コヴィディエンジャパン株式会社',status:'',lending:'',location:'',storage:'オペ室',discard:'廃棄'},
 {id:'CE-PU058',category:'パルスオキシメーター',name:'パルスフロー',model:'706-89133',serial:'XBU00SB471006',dept:'CE',manufacturer:'歯愛メディカル',status:'',lending:'',location:'',storage:'ME室',discard:''},
 {id:'CE-PU057',category:'パルスオキシメーター',name:'パルスフロー',model:'706-89133',serial:'XBU00SB471005',dept:'CE',manufacturer:'歯愛メディカル',status:'',lending:'',location:'',storage:'ME室',discard:''},
 {id:'CE-PU056',category:'パルスオキシメーター',name:'パルスフロー',model:'706-89133',serial:'XBU00SB471004',dept:'CE',manufacturer:'歯愛メディカル',status:'',lending:'',location:'',storage:'ME室',discard:''},
 {id:'CE-PU055',category:'パルスオキシメーター',name:'パルスフロー',model:'706-89133',serial:'XBU00SB471003',dept:'CE',manufacturer:'歯愛メディカル',status:'',lending:'',location:'',storage:'ME室',discard:''},
-{id:'4W-PU007',category:'パルスオキシメーター',name:'マシモSETフィンガーパルスオキシメータ マイティサット',model:'MightySat',serial:'4000137591',dept:'4F病棟西',manufacturer:'マシモジャパン',status:'',lending:'',location:'',storage:'4FW',discard:'廃棄'},
 {id:'CE-PU054',category:'パルスオキシメーター',name:'パルスフロー',model:'706-89133',serial:'XBU00SB471002',dept:'CE',manufacturer:'歯愛メディカル',status:'',lending:'',location:'',storage:'ME室',discard:''},
-{id:'4W-PU009',category:'パルスオキシメーター',name:'マシモSETフィンガーパルスオキシメータ マイティサット',model:'MightySat',serial:'4000269671',dept:'4F病棟西',manufacturer:'マシモジャパン',status:'',lending:'',location:'',storage:'4FW',discard:'廃棄'},
 {id:'CE-PU053',category:'パルスオキシメーター',name:'パルスフロー',model:'706-89133',serial:'XBU00SB471001',dept:'CE',manufacturer:'歯愛メディカル',status:'',lending:'',location:'',storage:'ME室',discard:''},
 {id:'CE-PU052',category:'パルスオキシメーター',name:'パルスフロー',model:'706-89133',serial:'XBU00SB471000',dept:'CE',manufacturer:'歯愛メディカル',status:'',lending:'',location:'',storage:'ME室',discard:''},
-{id:'4W-PU010',category:'パルスオキシメーター',name:'マシモSETフィンガーパルスオキシメータ マイティサット',model:'MightySat',serial:'4000240660',dept:'4F病棟西',manufacturer:'マシモジャパン',status:'',lending:'',location:'',storage:'4FW',discard:'廃棄'},
-{id:'DE-MR009',category:'呼吸器加温加湿器',name:'呼吸器加温加湿器',model:'PMH7000',serial:'770150',dept:'CE',manufacturer:'パシフィックメディコ株式会社',status:'',lending:'',location:'',storage:'ME室',discard:'廃棄'},
 {id:'CE-PU051',category:'パルスオキシメーター',name:'パルスフロー',model:'706-89133',serial:'XBU00SB470999',dept:'CE',manufacturer:'歯愛メディカル',status:'',lending:'',location:'',storage:'ME室',discard:''},
-{id:'4W-PU012',category:'パルスオキシメーター',name:'マシモSETフィンガーパルスオキシメータ マイティサット',model:'MightySat',serial:'4000199626',dept:'4F病棟西',manufacturer:'マシモジャパン',status:'',lending:'',location:'',storage:'4FW',discard:'廃棄'},
 {id:'CE-PU050',category:'パルスオキシメーター',name:'パルスフロー',model:'706-89133',serial:'XBU00SB470998',dept:'CE',manufacturer:'歯愛メディカル',status:'',lending:'',location:'',storage:'ME室',discard:''},
 {id:'CE-PU049',category:'パルスオキシメーター',name:'パルスフロー',model:'706-89133',serial:'XBU00SB470997',dept:'CE',manufacturer:'歯愛メディカル',status:'',lending:'',location:'',storage:'ME室',discard:''},
 {id:'CE-PU048',category:'パルスオキシメーター',name:'パルスフロー',model:'706-89133',serial:'XBU00SB470996',dept:'CE',manufacturer:'歯愛メディカル',status:'',lending:'',location:'',storage:'ME室',discard:''},
-{id:'CE-CM008TM027',category:'テレメータ',name:'心電･呼吸送信機 LX-7120',model:'LX-7120',serial:'50009859',dept:'CE',manufacturer:'フクダ電子',status:'',lending:'',location:'',storage:'3階東病棟',discard:''},
 {id:'CE-PU047',category:'パルスオキシメーター',name:'パルスフロー',model:'706-89133',serial:'XBU00SB470995',dept:'CE',manufacturer:'歯愛メディカル',status:'',lending:'',location:'',storage:'ME室',discard:''},
-{id:'4W-PU014',category:'パルスオキシメーター',name:'マシモSETフィンガーパルスオキシメータ マイティサット',model:'MightySat',serial:'4000053459',dept:'4F病棟西',manufacturer:'マシモジャパン',status:'',lending:'',location:'',storage:'4FW',discard:'廃棄'},
 {id:'CE-PU046',category:'パルスオキシメーター',name:'パルスフロー',model:'706-89133',serial:'XBU00SB470994',dept:'CE',manufacturer:'歯愛メディカル',status:'',lending:'',location:'',storage:'ME室',discard:''},
-{id:'4W-PU016',category:'パルスオキシメーター',name:'マシモSETフィンガーパルスオキシメータ マイティサット',model:'MightySat',serial:'4000198192',dept:'4F病棟西',manufacturer:'マシモジャパン',status:'',lending:'',location:'',storage:'4FW',discard:'廃棄'},
 {id:'CE-PU045',category:'パルスオキシメーター',name:'パルスフロー',model:'706-89133',serial:'XBU00SB470993',dept:'CE',manufacturer:'歯愛メディカル',status:'',lending:'',location:'',storage:'ME室',discard:''},
 {id:'CE-PU044',category:'パルスオキシメーター',name:'パルスフロー',model:'706-89133',serial:'XBU00SB470992',dept:'CE',manufacturer:'歯愛メディカル',status:'',lending:'',location:'',storage:'ME室',discard:''},
 {id:'CE-PU043',category:'パルスオキシメーター',name:'パルスフロー',model:'706-89133',serial:'XBU00SB470991',dept:'CE',manufacturer:'歯愛メディカル',status:'',lending:'',location:'',storage:'ME室',discard:''},
 {id:'CE-PU042',category:'パルスオキシメーター',name:'パルスフロー',model:'706-89133',serial:'XBU00SB470990',dept:'CE',manufacturer:'歯愛メディカル',status:'',lending:'',location:'',storage:'ME室',discard:''},
-{id:'DE-MR010',category:'呼吸器加温加湿器',name:'呼吸器加温加湿器',model:'PMH7000',serial:'770009',dept:'CE',manufacturer:'パシフィックメディコ株式会社',status:'',lending:'',location:'',storage:'ME室',discard:'廃棄'},
 {id:'CE-PU041',category:'パルスオキシメーター',name:'パルスフロー',model:'706-89133',serial:'XBU00SB470989',dept:'CE',manufacturer:'歯愛メディカル',status:'',lending:'貸出中',location:'4階西病棟',storage:'ME室',discard:''},
 {id:'CE-PU040',category:'パルスオキシメーター',name:'パルスフロー',model:'706-89133',serial:'XBU00SB470988',dept:'CE',manufacturer:'歯愛メディカル',status:'',lending:'',location:'',storage:'ME室',discard:''},
 {id:'CE-PU039',category:'パルスオキシメーター',name:'パルスフロー',model:'706-89133',serial:'XBU00SB470987',dept:'CE',manufacturer:'歯愛メディカル',status:'',lending:'貸出中',location:'4階西病棟',storage:'ME室',discard:''},
@@ -1457,42 +1452,29 @@ const INITIAL_EQUIPMENT = [
 {id:'CE-MO001',category:'モニターシステム',name:'高解像度LCDモニター',model:'OEV261H',serial:'7246350',dept:'CE',manufacturer:'オリンパスメディカルシステムズ株式会社',status:'',lending:'保管中',location:'ME室',storage:'オペ室',discard:''},
 {id:'CE-HL001',category:'高輝度光源装置',name:'VISERA ELITE',model:'CLV-S190',serial:'7202158',dept:'CE',manufacturer:'オリンパスメディカルシステムズ株式会社',status:'',lending:'保管中',location:'ME室',storage:'オペ室',discard:''},
 {id:'CE-VS001',category:'ビデオシステム',name:'内視鏡ビデオ画像プロセッサ',model:'OTV-S190',serial:'7232733',dept:'CE',manufacturer:'オリンパスメディカルシステムズ株式会社',status:'',lending:'保管中',location:'ME室',storage:'オペ室',discard:''},
-{id:'CE-IP060',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプTE-161',model:'TE-161',serial:'3060066',dept:'CE',manufacturer:'テルモ株式会社',status:'保管中',lending:'保管中',location:'ME室',storage:'ME室',discard:''},
 {id:'CE-DC008',category:'AED',name:'Heart Start FRｘ',model:'',serial:'',dept:'CE',manufacturer:'フィリップス',status:'',lending:'保管中',location:'ME室',storage:'3階病棟西',discard:''},
 {id:'CE-DC007',category:'AED',name:'Heart Start FR2+',model:'',serial:'705162320',dept:'CE',manufacturer:'フィリップス',status:'',lending:'保管中',location:'ME室',storage:'検査室',discard:''},
 {id:'CE-DC006',category:'AED',name:'Heart Start FRｘ',model:'',serial:'B22B-00578',dept:'CE',manufacturer:'フィリップス',status:'',lending:'保管中',location:'ME室',storage:'4階病棟東',discard:''},
 {id:'CE-CM006EQ015',category:'セントラルモニタ',name:'ﾃﾞｼﾞﾀﾙﾃﾚﾒｰﾀ受信機 LW-8000 ｼｽﾃﾑ',model:'WE-8000',serial:'50005061',dept:'CE',manufacturer:'フクダ電子',status:'',lending:'保管中',location:'ME室',storage:'4階東病棟',discard:''},
 {id:'CE-CM005EQ014',category:'セントラルモニタ',name:'ﾃﾞｼﾞﾀﾙﾃﾚﾒｰﾀ受信機 LW-8000 ｼｽﾃﾑ',model:'WE-8000',serial:'50005085',dept:'CE',manufacturer:'フクダ電子',status:'',lending:'保管中',location:'ME室',storage:'4階東病棟',discard:''},
 {id:'CE-CM006',category:'セントラルモニタ',name:'セントラルモニタ DS-8700システム',model:'DSC-8730',serial:'50004325',dept:'CE',manufacturer:'フクダ電子',status:'',lending:'保管中',location:'ME室',storage:'4階東病棟',discard:''},
-{id:'CE-PU104',category:'パルスオキシメーター',name:'パルスフロー',model:'706-89133',serial:'XBU00SB471052',dept:'4F病棟西',manufacturer:'歯愛メディカル',status:'',lending:'',location:'',storage:'ME室',discard:'廃棄'},
 {id:'CE-CM005',category:'セントラルモニタ',name:'セントラルモニタ DS-8700システム',model:'DSC-8730',serial:'50004326',dept:'CE',manufacturer:'フクダ電子',status:'',lending:'保管中',location:'ME室',storage:'4階東病棟',discard:''},
 {id:'CE-MR007',category:'呼吸器加温加湿器',name:'呼吸器加温加湿器',model:'PMH7000',serial:'770288',dept:'CE',manufacturer:'パシフィックメディコ株式会社',status:'',lending:'保管中',location:'ME室',storage:'ME室',discard:''},
 {id:'CE-MR006',category:'呼吸器加温加湿器',name:'呼吸器加温加湿器',model:'PMH7000',serial:'770292',dept:'CE',manufacturer:'パシフィックメディコ株式会社',status:'',lending:'保管中',location:'ME室',storage:'ME室',discard:''},
 {id:'CE-MR005',category:'呼吸器加温加湿器',name:'呼吸器加温加湿器',model:'PMH7000',serial:'770291',dept:'CE',manufacturer:'パシフィックメディコ株式会社',status:'',lending:'保管中',location:'ME室',storage:'ME室',discard:''},
 {id:'DE-MR004',category:'呼吸器加温加湿器',name:'呼吸器加温加湿器',model:'PMH7000',serial:'770017',dept:'CE',manufacturer:'パシフィックメディコ株式会社',status:'',lending:'保管中',location:'ME室',storage:'ME室',discard:'廃棄'},
 {id:'CE-MR003',category:'呼吸器加温加湿器',name:'呼吸器加温加湿器',model:'PMH7000',serial:'770290',dept:'CE',manufacturer:'パシフィックメディコ株式会社',status:'',lending:'保管中',location:'ME室',storage:'ME室',discard:''},
-{id:'CE-PU111',category:'パルスオキシメーター',name:'パルスフロー',model:'706-89133',serial:'XBU00SB471059',dept:'リハビリ',manufacturer:'歯愛メディカル',status:'',lending:'',location:'',storage:'ME室',discard:'廃棄'},
 {id:'CE-MR002',category:'呼吸器加温加湿器',name:'呼吸器加温加湿器',model:'PMH7000',serial:'770766',dept:'CE',manufacturer:'パシフィックメディコ株式会社',status:'',lending:'保管中',location:'ME室',storage:'ME室',discard:''},
 {id:'DE-MR001',category:'呼吸器加温加湿器',name:'呼吸器加温加湿器',model:'PMH7000',serial:'770011',dept:'CE',manufacturer:'パシフィックメディコ株式会社',status:'',lending:'保管中',location:'ME室',storage:'ME室',discard:'廃棄'},
 {id:'CE-BM021',category:'ベッドサイドモニタ',name:'生体情報モニタ BP-608 EvolutionⅡ',model:'BP-608EV',serial:'10138',dept:'CE',manufacturer:'フクダコーリン株式会社',status:'',lending:'保管中',location:'ME室',storage:'手術室3',discard:'廃棄待ち'},
 {id:'CE-EG004',category:'電気メス',name:'コンメド システム2450',model:'60-8200-120',serial:'21130174',dept:'CE',manufacturer:'日本メディカルネクスト株式会社',status:'貸出中',lending:'保管中',location:'ER',storage:'内科処置室',discard:''},
-{id:'CE-PU116',category:'パルスオキシメーター',name:'パルスフロー',model:'706-89133',serial:'XBU00SB471064',dept:'CE',manufacturer:'歯愛メディカル',status:'',lending:'',location:'',storage:'リハビリ室',discard:'廃棄'},
 {id:'CE-EG003',category:'電気メス',name:'コンメド システム2450',model:'60-2450-100',serial:'18230010',dept:'CE',manufacturer:'日本メディカルネクスト株式会社',status:'貸出中',lending:'保管中',location:'手術室',storage:'オペ室 ルーム2',discard:''},
 {id:'CE-BM013EQ013',category:'ベッドサイドモニタ',name:'ﾚｺｰﾀﾞ・拡張ﾎﾟｰﾄﾕﾆｯﾄ',model:'HR-811',serial:'50005995',dept:'CE',manufacturer:'フクダ電子',status:'貸出中',lending:'貸出中',location:'内視鏡回復室',storage:'内視鏡回復室',discard:''},
 {id:'CE-BM013',category:'ベッドサイドモニタ',name:'ﾀﾞｲﾅｽｺｰﾌﾟ8000ｼﾘｰｽﾞ DS-8100ｼｽﾃﾑ',model:'DS-8100M',serial:'50000761',dept:'CE',manufacturer:'フクダ電子',status:'貸出中',lending:'貸出中',location:'内視鏡回復室',storage:'内視鏡回復室',discard:''},
 {id:'CE-BM012EQ012',category:'ベッドサイドモニタ',name:'ﾚｺｰﾀﾞ・拡張ﾎﾟｰﾄﾕﾆｯﾄ',model:'HR-811',serial:'50009378',dept:'CE',manufacturer:'フクダ電子',status:'貸出中',lending:'貸出中',location:'レントゲン室',storage:'レントゲン室',discard:''},
 {id:'CE-BM012',category:'ベッドサイドモニタ',name:'ﾀﾞｲﾅｽｺｰﾌﾟ8000ｼﾘｰｽﾞ DS-8100ｼｽﾃﾑ',model:'DS-8100M',serial:'50010212',dept:'CE',manufacturer:'フクダ電子',status:'貸出中',lending:'貸出中',location:'レントゲン室',storage:'レントゲン室',discard:''},
-{id:'CE-PU122',category:'パルスオキシメーター',name:'パルスフロー',model:'706-89133',serial:'XBU00SB471070',dept:'CE',manufacturer:'歯愛メディカル',status:'',lending:'',location:'',storage:'リハビリ室',discard:'廃棄'},
-{id:'CE-PU123',category:'パルスオキシメーター',name:'パルスフロー',model:'706-89133',serial:'XBU00SB471071',dept:'CE',manufacturer:'歯愛メディカル',status:'',lending:'',location:'',storage:'リハビリ室',discard:'廃棄'},
 {id:'CE-SP021',category:'シリンジポンプ',name:'テルフュージョンシリンジポンプTE-332SOC',model:'TE-332SOC',serial:'1007000040',dept:'CE',manufacturer:'テルモ株式会社',status:'貸出中',lending:'保管中',location:'4階西病棟',storage:'',discard:''},
 {id:'CE-SP020',category:'シリンジポンプ',name:'テルフュージョンTCIポンプTE-371',model:'TE-371',serial:'150500050',dept:'CE',manufacturer:'テルモ株式会社',status:'貸出中',lending:'貸出中',location:'手術室',storage:'手術室',discard:''},
-{id:'CE-IP059',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプTE-161S',model:'TE-161S',serial:'1007000150',dept:'CE',manufacturer:'テルモ株式会社',status:'保管中',lending:'保管中',location:'ME室',storage:'ME室',discard:''},
-{id:'CE-IP058',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプTE-161S',model:'TE-161S',serial:'1007000155',dept:'CE',manufacturer:'テルモ株式会社',status:'保管中',lending:'保管中',location:'ME室',storage:'ME室',discard:''},
-{id:'CE-IP057',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプTE-161S',model:'TE-161S',serial:'1007000152',dept:'CE',manufacturer:'テルモ株式会社',status:'保管中',lending:'保管中',location:'ME室',storage:'ME室',discard:''},
-{id:'CE-IP056',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプTE-161',model:'TE-161',serial:'3060043',dept:'CE',manufacturer:'テルモ株式会社',status:'保管中',lending:'保管中',location:'ME室',storage:'ME室',discard:''},
-{id:'CE-IP055',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプTE-161S',model:'TE-161S',serial:'1101000108',dept:'CE',manufacturer:'テルモ株式会社',status:'保管中',lending:'保管中',location:'ME室',storage:'ME室',discard:''},
-{id:'CE-IP054',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプTE-161S',model:'TE-161S',serial:'603001208',dept:'CE',manufacturer:'テルモ株式会社',status:'保管中',lending:'保管中',location:'ME室',storage:'',discard:''},
-{id:'CE-IP053',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプTE-161S',model:'TE-161S',serial:'4090325',dept:'CE',manufacturer:'テルモ株式会社',status:'保管中',lending:'保管中',location:'ME室',storage:'ME室',discard:''},
 {id:'CE-AA003',category:'麻酔器',name:'FLOW-i 麻酔システム',model:'FLOW-I C20',serial:'22400BZX00385000',dept:'CE',manufacturer:'マッケ・ジャパン株式会社',status:'',lending:'保管中',location:'ME室',storage:'オペ場 ルーム2',discard:''},
 {id:'CE-CM004',category:'セントラルモニタ',name:'ダイナスコープ7000シリーズ DS-7700システム',model:'DS-7780',serial:'50001769',dept:'CE',manufacturer:'フクダ電子',status:'',lending:'保管中',location:'ME室',storage:'3階西病棟',discard:''},
 {id:'CE-CM003',category:'セントラルモニタ',name:'ダイナスコープ7000シリーズ DS-7700システム',model:'DS‐7780',serial:'50000960',dept:'CE',manufacturer:'フクダ電子',status:'',lending:'保管中',location:'ME室',storage:'透析室',discard:''},
@@ -1549,72 +1531,21 @@ const INITIAL_EQUIPMENT = [
 {id:'CE-IP051',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプ28型',model:'TE-281N',serial:'2112022485',dept:'CE',manufacturer:'テルモ株式会社',status:'貸出中',lending:'保管中',location:'ER',storage:'ME室',discard:''},
 {id:'CE-IP050',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプ28型',model:'TE-281N',serial:'2112022480',dept:'CE',manufacturer:'テルモ株式会社',status:'貸出中',lending:'保管中',location:'4階東病棟',storage:'ME室',discard:''},
 {id:'CE-IP049',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプ28型',model:'TE-281N',serial:'2112021911',dept:'CE',manufacturer:'テルモ株式会社',status:'保管中',lending:'保管中',location:'ME室',storage:'ME室',discard:''},
-{id:'CE-PU209',category:'パルスオキシメーター',name:'マシモSETフィンガーパルスオキシメータ マイティサット',model:'MightySat',serial:'4000124835',dept:'4F病棟西',manufacturer:'マシモジャパン',status:'',lending:'',location:'',storage:'中央処置室',discard:'廃棄'},
 {id:'CE-IP048',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプ28型',model:'TE-281N',serial:'2112021917',dept:'CE',manufacturer:'テルモ株式会社',status:'保管中',lending:'保管中',location:'ME室',storage:'ME室',discard:''},
 {id:'CE-IP047',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプ28型',model:'TE-281N',serial:'2112021912',dept:'CE',manufacturer:'テルモ株式会社',status:'保管中',lending:'保管中',location:'ME室',storage:'ME室',discard:''},
 {id:'CE-IP046',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプ28型',model:'TE-281N',serial:'2112021915',dept:'CE',manufacturer:'テルモ株式会社',status:'保管中',lending:'保管中',location:'ME室',storage:'ME室',discard:''},
 {id:'CE-IP045',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプ28型',model:'TE-281N',serial:'2112021918',dept:'CE',manufacturer:'テルモ株式会社',status:'保管中',lending:'保管中',location:'ME室',storage:'ME室',discard:''},
-{id:'4W-PU210',category:'パルスオキシメーター',name:'マシモSETフィンガーパルスオキシメータ マイティサット',model:'MightySat',serial:'4000124835',dept:'4F病棟西',manufacturer:'マシモジャパン',status:'',lending:'',location:'',storage:'中央処置室',discard:'廃棄'},
-{id:'DE-AA005',category:'麻酔器',name:'FLOW-i 麻酔システム',model:'FLOW-I C20',serial:'2669',dept:'CE',manufacturer:'マッケ・ジャパン株式会社',status:'',lending:'',location:'',storage:'オペ場 ルーム2',discard:'廃棄'},
-{id:'4W-PU211',category:'パルスオキシメーター',name:'マシモSETフィンガーパルスオキシメータ マイティサット',model:'MightySat',serial:'4000136969',dept:'4F病棟西',manufacturer:'マシモジャパン',status:'',lending:'',location:'',storage:'中央処置室',discard:'廃棄'},
 {id:'CE-IP044',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプ28型',model:'TE-281N',serial:'2112022479',dept:'CE',manufacturer:'テルモ株式会社',status:'保管中',lending:'保管中',location:'ME室',storage:'ME室',discard:''},
 {id:'CE-IP043',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプ28型',model:'TE-281N',serial:'2112021914',dept:'CE',manufacturer:'テルモ株式会社',status:'保管中',lending:'保管中',location:'ME室',storage:'ME室',discard:''},
-{id:'4W-PU212',category:'パルスオキシメーター',name:'マシモSETフィンガーパルスオキシメータ マイティサット',model:'MightySat',serial:'4000198110',dept:'4F病棟西',manufacturer:'マシモジャパン',status:'',lending:'',location:'',storage:'4FW',discard:'廃棄'},
-{id:'3W-PU213',category:'パルスオキシメーター',name:'マシモSETフィンガーパルスオキシメータ マイティサット',model:'MightySat',serial:'4000127688',dept:'4F病棟西',manufacturer:'マシモジャパン',status:'',lending:'',location:'',storage:'4FW',discard:'廃棄'},
 {id:'CE-SP008',category:'シリンジポンプ',name:'テルフュージョンシリンジポンプ38型',model:'TE-381',serial:'2201008889',dept:'CE',manufacturer:'テルモ株式会社',status:'保管中',lending:'保管中',location:'ME室',storage:'ME室',discard:''},
-{id:'DE-MR012',category:'呼吸器加温加湿器',name:'呼吸器加温加湿器',model:'PMH7000',serial:'770145',dept:'CE',manufacturer:'パシフィックメディコ株式会社',status:'',lending:'',location:'',storage:'ME室',discard:'廃棄'},
 {id:'CE-IP042',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプ28型',model:'TE-281N',serial:'2112021913',dept:'CE',manufacturer:'テルモ株式会社',status:'貸出中',lending:'保管中',location:'4階西病棟',storage:'ME室',discard:''},
 {id:'CE-SP007',category:'シリンジポンプ',name:'テルフュージョンシリンジポンプTE-331S',model:'TE-331S',serial:'3030539',dept:'CE',manufacturer:'テルモ株式会社',status:'貸出中',lending:'貸出中',location:'3階西病棟',storage:'手術室',discard:''},
 {id:'CE-SP006',category:'シリンジポンプ',name:'テルフュージョンTCIポンプTE-371',model:'TE-371',serial:'170200224',dept:'CE',manufacturer:'テルモ株式会社',status:'貸出中',lending:'貸出中',location:'手術室',storage:'手術室',discard:''},
 {id:'CE-SP005',category:'シリンジポンプ',name:'テルフュージョンシリンジポンプTE-332SOC',model:'TE-332SOC',serial:'801000131',dept:'CE',manufacturer:'テルモ株式会社',status:'保管中',lending:'保管中',location:'ME室',storage:'ME室',discard:''},
-{id:'4W-PU216',category:'パルスオキシメーター',name:'マシモSETフィンガーパルスオキシメータ マイティサット',model:'MightySat',serial:'4000272363',dept:'4F病棟西',manufacturer:'マシモジャパン',status:'',lending:'',location:'',storage:'4FW',discard:'廃棄'},
 {id:'CE-SP004',category:'シリンジポンプ',name:'テルフュージョンシリンジポンプ35型TE-352Q',model:'TE-352Q',serial:'1907013039',dept:'CE',manufacturer:'テルモ株式会社',status:'保管中',lending:'保管中',location:'ME室',storage:'ME室',discard:''},
 {id:'CE-SP003',category:'シリンジポンプ',name:'テルフュージョンシリンジポンプ35型TE-351',model:'TE-351',serial:'1506010350',dept:'CE',manufacturer:'テルモ株式会社',status:'保管中',lending:'保管中',location:'ME室',storage:'ME室',discard:''},
 {id:'CE-SP002',category:'シリンジポンプ',name:'テルフュージョンシリンジポンプTE-332SOC',model:'TE-332SOC',serial:'1203000030',dept:'CE',manufacturer:'テルモ株式会社',status:'貸出中',lending:'保管中',location:'4階西病棟',storage:'ME室',discard:''},
 {id:'CE-SP001',category:'シリンジポンプ',name:'テルフュージョンシリンジポンプTE-331S',model:'TE-331S',serial:'3030283',dept:'CE',manufacturer:'テルモ株式会社',status:'貸出中',lending:'保管中',location:'4階東病棟',storage:'ME室',discard:''},
-{id:'CE-IP041',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプTE-161S',model:'TE-161SA',serial:'703000687',dept:'CE',manufacturer:'テルモ株式会社',status:'',lending:'保管中',location:'津腎クリニック',storage:'津腎クリニック',discard:'廃棄'},
-{id:'CE-IP040',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプTE-161',model:'TE-161',serial:'1060163',dept:'CE',manufacturer:'テルモ株式会社',status:'保管中',lending:'保管中',location:'ME室',storage:'ME室',discard:''},
-{id:'CE-IP039',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプTE-161S',model:'TE-161SA',serial:'1303020180',dept:'CE',manufacturer:'テルモ株式会社',status:'保管中',lending:'保管中',location:'ME室',storage:'ME室',discard:''},
-{id:'CE-IP038',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプTE-161S',model:'TE-161SA',serial:'1303020178',dept:'CE',manufacturer:'テルモ株式会社',status:'保管中',lending:'保管中',location:'ME室',storage:'ME室',discard:''},
-{id:'CE-IP063',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプTE-161S',model:'TE-161S',serial:'1007000132',dept:'CE',manufacturer:'テルモ株式会社',status:'保管中',lending:'保管中',location:'ME室',storage:'ME室',discard:''},
-{id:'CE-IP064',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプTE-161S',model:'TE-161S',serial:'1007000149',dept:'CE',manufacturer:'テルモ株式会社',status:'保管中',lending:'保管中',location:'ME室',storage:'ME室',discard:''},
-{id:'CE-IP037',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプTE-161S',model:'TE-161SA',serial:'1303020174',dept:'CE',manufacturer:'テルモ株式会社',status:'保管中',lending:'保管中',location:'ME室',storage:'ME室',discard:''},
-{id:'CE-IP036',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプTE-161S',model:'TE-161SA',serial:'1303000218',dept:'CE',manufacturer:'テルモ株式会社',status:'保管中',lending:'保管中',location:'ME室',storage:'ME室',discard:''},
-{id:'CE-IP035',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプTE-161S',model:'TE-161SA',serial:'1303000181',dept:'CE',manufacturer:'テルモ株式会社',status:'保管中',lending:'保管中',location:'ME室',storage:'ME室',discard:''},
-{id:'CE-IP034',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプTE-161S',model:'TE-161SA',serial:'1303000229',dept:'CE',manufacturer:'テルモ株式会社',status:'',lending:'保管中',location:'津腎クリニック',storage:'津腎クリニック',discard:'廃棄待ち'},
-{id:'CE-IP033',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプTE-161S',model:'TE-161SA',serial:'1303000226',dept:'CE',manufacturer:'テルモ株式会社',status:'',lending:'保管中',location:'津腎クリニック',storage:'津腎クリニック',discard:'廃棄待ち'},
-{id:'CE-IP032',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプTE-161S',model:'TE-161SA',serial:'1303000222',dept:'CE',manufacturer:'テルモ株式会社',status:'保管中',lending:'保管中',location:'ME室',storage:'ME室',discard:''},
-{id:'CE-IP031',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプTE-161S',model:'TE-161SA',serial:'1106000667',dept:'CE',manufacturer:'テルモ株式会社',status:'保管中',lending:'保管中',location:'ME室',storage:'ME室',discard:''},
-{id:'CE-IP030',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプTE-161S',model:'TE-161SA',serial:'1106000664',dept:'CE',manufacturer:'テルモ株式会社',status:'',lending:'保管中',location:'津腎クリニック',storage:'津腎クリニック',discard:'廃棄待ち'},
-{id:'CE-IP029',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプTE-161S',model:'TE-161SA',serial:'1101000111',dept:'CE',manufacturer:'テルモ株式会社',status:'',lending:'保管中',location:'津腎クリニック',storage:'津腎クリニック',discard:'廃棄待ち'},
-{id:'CE-IP028',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプTE-161S',model:'TE-161SA',serial:'1101000110',dept:'CE',manufacturer:'テルモ株式会社',status:'',lending:'保管中',location:'津腎クリニック',storage:'津腎クリニック',discard:'廃棄待ち'},
-{id:'CE-IP027',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプTE-161S',model:'TE-161SA',serial:'1101000109',dept:'CE',manufacturer:'テルモ株式会社',status:'',lending:'保管中',location:'津腎クリニック',storage:'津腎クリニック',discard:'廃棄待ち'},
-{id:'CE-IP026',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプTE-161S',model:'TE-161SA',serial:'1101000105',dept:'CE',manufacturer:'テルモ株式会社',status:'',lending:'保管中',location:'津腎クリニック',storage:'津腎クリニック',discard:'廃棄待ち'},
-{id:'CE-IP025',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプTE-161S',model:'TE-161SA',serial:'1101000113',dept:'CE',manufacturer:'テルモ株式会社',status:'保管中',lending:'保管中',location:'ME室',storage:'ME室',discard:''},
-{id:'CE-IP024',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプTE-161S',model:'TE-161SA',serial:'1101000106',dept:'CE',manufacturer:'テルモ株式会社',status:'保管中',lending:'保管中',location:'ME室',storage:'ME室',discard:''},
-{id:'CE-IP023',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプTE-161S',model:'TE-161SA',serial:'1101000103',dept:'CE',manufacturer:'テルモ株式会社',status:'保管中',lending:'保管中',location:'ME室',storage:'ME室',discard:''},
-{id:'CE-IP022',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプTE-161S',model:'TE-161SA',serial:'1101000115',dept:'CE',manufacturer:'テルモ株式会社',status:'保管中',lending:'保管中',location:'ME室',storage:'ME室',discard:''},
-{id:'CE-IP021',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプTE-161S',model:'TE-161SA',serial:'1101000100',dept:'CE',manufacturer:'テルモ株式会社',status:'保管中',lending:'保管中',location:'ME室',storage:'ME室',discard:''},
-{id:'CE-IP020',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプTE-161S',model:'TE-161SA',serial:'1101000099',dept:'CE',manufacturer:'テルモ株式会社',status:'保管中',lending:'保管中',location:'ME室',storage:'ME室',discard:''},
-{id:'CE-IP019',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプTE-161S',model:'TE-161SA',serial:'1101000081',dept:'CE',manufacturer:'テルモ株式会社',status:'保管中',lending:'保管中',location:'ME室',storage:'ME室',discard:'廃棄'},
-{id:'CE-IP018',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプTE-161S',model:'TE-161SA',serial:'1010000666',dept:'CE',manufacturer:'テルモ株式会社',status:'',lending:'保管中',location:'津腎クリニック',storage:'津腎クリニック',discard:'廃棄待ち'},
-{id:'CE-IP017',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプTE-161S',model:'TE-161SA',serial:'1010000663',dept:'CE',manufacturer:'テルモ株式会社',status:'',lending:'保管中',location:'津腎クリニック',storage:'津腎クリニック',discard:'廃棄待ち'},
-{id:'CE-IP016',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプTE-161S',model:'TE-161SA',serial:'1010000661',dept:'CE',manufacturer:'テルモ株式会社',status:'保管中',lending:'保管中',location:'ME室',storage:'ME室',discard:''},
-{id:'CE-IP015',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプTE-161S',model:'TE-161SA',serial:'1010000660',dept:'CE',manufacturer:'テルモ株式会社',status:'保管中',lending:'保管中',location:'ME室',storage:'ME室',discard:'廃棄'},
-{id:'CE-IP014',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプTE-161S',model:'TE-161SA',serial:'1004000684',dept:'CE',manufacturer:'テルモ株式会社',status:'',lending:'保管中',location:'津腎クリニック',storage:'津腎クリニック',discard:'廃棄待ち'},
-{id:'CE-IP013',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプTE-161S',model:'TE-161SA',serial:'1004000691',dept:'CE',manufacturer:'テルモ株式会社',status:'保管中',lending:'保管中',location:'ME室',storage:'ME室',discard:''},
-{id:'CE-IP012',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプTE-161S',model:'TE-161SA',serial:'908000398',dept:'CE',manufacturer:'テルモ株式会社',status:'保管中',lending:'保管中',location:'ME室',storage:'ME室',discard:''},
-{id:'CE-IP011',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプTE-161S',model:'TE-161SA',serial:'607000678',dept:'CE',manufacturer:'テルモ株式会社',status:'',lending:'保管中',location:'津腎クリニック',storage:'津腎クリニック',discard:'廃棄待ち'},
-{id:'CE-IP010',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプTE-161S',model:'TE-161SA',serial:'603001203',dept:'CE',manufacturer:'テルモ株式会社',status:'',lending:'保管中',location:'津腎クリニック',storage:'津腎クリニック',discard:'廃棄待ち'},
-{id:'CE-IP009',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプTE-161S',model:'TE-161SA',serial:'603001207',dept:'CE',manufacturer:'テルモ株式会社',status:'保管中',lending:'保管中',location:'ME室',storage:'ME室',discard:''},
-{id:'CE-IP008',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプTE-161S',model:'TE-161SA',serial:'603001210',dept:'CE',manufacturer:'テルモ株式会社',status:'保管中',lending:'保管中',location:'ME室',storage:'ME室',discard:''},
-{id:'CE-IP007',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプTE-161S',model:'TE-161SA',serial:'601000225',dept:'CE',manufacturer:'テルモ株式会社',status:'',lending:'保管中',location:'津腎クリニック',storage:'津腎クリニック',discard:'廃棄待ち'},
-{id:'CE-IP006',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプTE-161S',model:'TE-161SA',serial:'601000223',dept:'CE',manufacturer:'テルモ株式会社',status:'',lending:'保管中',location:'津腎クリニック',storage:'津腎クリニック',discard:'廃棄待ち'},
-{id:'CE-IP005',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプTE-161S',model:'TE-161SA',serial:'601000228',dept:'CE',manufacturer:'テルモ株式会社',status:'保管中',lending:'保管中',location:'ME室',storage:'ME室',discard:'廃棄'},
-{id:'CE-IP004',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプTE-161S',model:'TE-161S',serial:'4020589',dept:'CE',manufacturer:'テルモ株式会社',status:'',lending:'保管中',location:'津腎クリニック',storage:'津腎クリニック',discard:'廃棄待ち'},
-{id:'CE-IP001',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプTE-161S',model:'TE-161',serial:'1060134',dept:'CE',manufacturer:'テルモ株式会社',status:'保管中',lending:'保管中',location:'ME室',storage:'ME室',discard:'廃棄'},
-{id:'CE-IP003',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプTE-161S',model:'TE-161',serial:'3060037',dept:'CE',manufacturer:'テルモ株式会社',status:'保管中',lending:'保管中',location:'ME室',storage:'ME室',discard:'廃棄'},
-{id:'CE-IP002',category:'輸液ポンプ',name:'テルフュージョン輸液ポンプTE-161S',model:'TE-161',serial:'3060036',dept:'CE',manufacturer:'テルモ株式会社',status:'保管中',lending:'保管中',location:'ME室',storage:'ME室',discard:'廃棄'},
 {id:'CE-RE006',category:'人工呼吸器',name:'HAMILTON-T1',model:'HAMILTON-T1',serial:'2461',dept:'CE',manufacturer:'日本光電',status:'保管中',lending:'保管中',location:'ME室',storage:'',discard:''},
 {id:'CE-RE005',category:'人工呼吸器',name:'HAMILTON-C1',model:'HAMILTON-C1',serial:'6296',dept:'CE',manufacturer:'日本光電',status:'保管中',lending:'保管中',location:'ME室',storage:'',discard:''},
 {id:'CE-RE004',category:'人工呼吸器',name:'HAMILTON-C1',model:'HAMILTON-C1',serial:'6290',dept:'CE',manufacturer:'日本光電',status:'貸出中',lending:'保管中',location:'4階東病棟',storage:'',discard:''},
@@ -1630,7 +1561,6 @@ const INITIAL_EQUIPMENT = [
 {id:'CE-BM020',category:'ベッドサイドモニタ',name:'ﾀﾞｲﾅｽｺｰﾌﾟ8000ｼﾘｰｽﾞ DS-8100ｼｽﾃﾑ',model:'DS-8100M',serial:'50010209',dept:'CE',manufacturer:'フクダ電子',status:'貸出中',lending:'貸出中',location:'透析室',storage:'透析室',discard:''},
 {id:'CE-CM008TM026',category:'テレメータ',name:'心電･呼吸SPO2送信機 LX-7230',model:'LX-7230N',serial:'50003136',dept:'CE',manufacturer:'フクダ電子',status:'貸出中',lending:'貸出中',location:'3階東病棟',storage:'3階東病棟',discard:''},
 {id:'CE-BM009EQ016',category:'ベッドサイドモニタ',name:'ﾚｺｰﾀﾞ・拡張ﾎﾟｰﾄﾕﾆｯﾄ',model:'DSC-8430',serial:'50002582',dept:'CE',manufacturer:'フクダ電子',status:'貸出中',lending:'貸出中',location:'4階東病棟',storage:'4階東病棟',discard:''},
-{id:'CE-CM006TM015',category:'テレメータ',name:'心電･呼吸送信機 LX-7120',model:'LX-7120',serial:'50010868',dept:'CE',manufacturer:'フクダ電子',status:'',lending:'',location:'',storage:'4階東病棟',discard:'廃棄'},
 {id:'CE-BM009',category:'ベッドサイドモニタ',name:'ﾀﾞｲﾅｽｺｰﾌﾟ8000ｼﾘｰｽﾞDS-8007ｼｽﾃﾑ',model:'DS-8007M',serial:'50010299',dept:'CE',manufacturer:'フクダ電子',status:'貸出中',lending:'貸出中',location:'4階東病棟',storage:'4階東病棟',discard:''},
 {id:'CE-BM010',category:'ベッドサイドモニタ',name:'ﾀﾞｲﾅｽｺｰﾌﾟ8000ｼﾘｰｽﾞ DS-8100ｼｽﾃﾑ',model:'DS-8100M',serial:'50010206',dept:'CE',manufacturer:'フクダ電子',status:'貸出中',lending:'貸出中',location:'4階東病棟',storage:'4階東病棟',discard:''},
 {id:'CE-CM005TM009',category:'テレメータ',name:'心電･呼吸送信機 LX-8300',model:'LX-8300',serial:'50014657',dept:'CE',manufacturer:'フクダ電子',status:'貸出中',lending:'貸出中',location:'4階東病棟',storage:'4階東病棟',discard:''},
@@ -1640,13 +1570,11 @@ const INITIAL_EQUIPMENT = [
 {id:'CE-CM005TM011',category:'テレメータ',name:'心電･呼吸SPO2送信機 LX-7230',model:'LX-7230N',serial:'50009366',dept:'CE',manufacturer:'フクダ電子',status:'貸出中',lending:'貸出中',location:'4階東病棟',storage:'4階東病棟',discard:''},
 {id:'CE-CM005TM029',category:'テレメータ',name:'心電･呼吸送信機 LX-8300',model:'LX-8300',serial:'ZAB00219',dept:'CE',manufacturer:'フクダ電子',status:'貸出中',lending:'貸出中',location:'4階東病棟',storage:'4階東病棟',discard:''},
 {id:'DE-CM005TM028',category:'テレメータ',name:'心電･呼吸SPO2送信機 LX-7230',model:'LX-7230N',serial:'50001884',dept:'CE',manufacturer:'フクダ電子',status:'貸出中',lending:'貸出中',location:'4階東病棟',storage:'4階東病棟',discard:''},
-{id:'CE-CM005TM010',category:'テレメータ',name:'心電･呼吸SPO2送信機 LX-7230',model:'LX-7230N',serial:'50009367',dept:'CE',manufacturer:'フクダ電子',status:'',lending:'',location:'',storage:'4階東病棟',discard:'廃棄'},
 {id:'CE-BM019',category:'ベッドサイドモニタ',name:'ﾀﾞｲﾅｽｺｰﾌﾟ8000ｼﾘｰｽﾞ DS-8100ｼｽﾃﾑ',model:'DS-8100M',serial:'50000125',dept:'CE',manufacturer:'フクダ電子',status:'貸出中',lending:'貸出中',location:'4階東病棟',storage:'4階東病棟',discard:''},
 {id:'CE-BM018',category:'ベッドサイドモニタ',name:'ﾀﾞｲﾅｽｺｰﾌﾟ8000ｼﾘｰｽﾞ DS-8100ｼｽﾃﾑ',model:'DS-8100M',serial:'50000126',dept:'CE',manufacturer:'フクダ電子',status:'貸出中',lending:'貸出中',location:'4階東病棟',storage:'4階東病棟',discard:''},
 {id:'CE-CM002TM006',category:'テレメータ',name:'心電･呼吸送信機 LX-8100',model:'LX-8100',serial:'50020457',dept:'CE',manufacturer:'フクダ電子',status:'貸出中',lending:'貸出中',location:'4階西病棟',storage:'4階西病棟',discard:''},
 {id:'CE-CM002TM020',category:'テレメータ',name:'心電･呼吸送信機 LX-8100',model:'LX-8100',serial:'50005890',dept:'CE',manufacturer:'フクダ電子',status:'貸出中',lending:'貸出中',location:'4階西病棟',storage:'4階西病棟',discard:''},
 {id:'CE-BM017EQ021',category:'ベッドサイドモニタ',name:'ﾚｺｰﾀﾞ・拡張ﾎﾟｰﾄﾕﾆｯﾄ',model:'DSC-8430',serial:'50002585',dept:'CE',manufacturer:'フクダ電子',status:'貸出中',lending:'貸出中',location:'4階西病棟',storage:'4階西病棟',discard:''},
-{id:'CE-BM022',category:'ベッドサイドモニタ',name:'ベッドサイドモニタ DS-8400システム',model:'DSC-8430',serial:'50002585',dept:'CE',manufacturer:'フクダ電子',status:'',lending:'',location:'',storage:'4階西病棟',discard:'廃棄'},
 {id:'CE-BM017',category:'ベッドサイドモニタ',name:'ﾀﾞｲﾅｽｺｰﾌﾟ8000ｼﾘｰｽﾞDS-8007ｼｽﾃﾑ',model:'DS-8007M',serial:'50010301',dept:'CE',manufacturer:'フクダ電子',status:'貸出中',lending:'貸出中',location:'4階西病棟',storage:'4階西病棟',discard:''},
 {id:'CE-BM015',category:'ベッドサイドモニタ',name:'ﾀﾞｲﾅｽｺｰﾌﾟ8000ｼﾘｰｽﾞ DS-8100ｼｽﾃﾑ',model:'DS-8100M',serial:'50010207',dept:'CE',manufacturer:'フクダ電子',status:'貸出中',lending:'貸出中',location:'4階西病棟',storage:'4階西病棟',discard:''},
 {id:'CE-BM016',category:'ベッドサイドモニタ',name:'ﾀﾞｲﾅｽｺｰﾌﾟ8000ｼﾘｰｽﾞ DS-8100ｼｽﾃﾑ',model:'DS-8100M',serial:'50010208',dept:'CE',manufacturer:'フクダ電子',status:'貸出中',lending:'貸出中',location:'4階西病棟',storage:'4階西病棟',discard:''},
@@ -1718,8 +1646,17 @@ const SHEET_NAMES = {
   departments: '部署',
   areas: '貸出エリア',
   items: '物品マスター',
-  orders: '発注データ'
+  orders: '発注データ',
+  inventoryLog: '入出庫履歴'
 };
+
+// 各種点検シート名の一覧（タイプ別点検データ取得用）
+const TYPED_INSPECTION_SHEETS = [
+  '輸液ポンプ点検', 'シリンジポンプ点検', '人工呼吸器点検', '除細動器点検',
+  '医用テレメーター点検', 'ベッドサイドモニター点検', '麻酔器点検',
+  '低圧持続吸引機点検', '低圧持続吸引器点検', 'IABP点検', 'ECMO_PCPS点検', '保育器点検', '電気メス点検', 'AED点検',
+  'パルスオキシメータ点検', '経腸栄養ポンプ点検'
+];
 
 // ===== ヘルパー関数 =====
 function getSpreadsheet() {
@@ -1733,6 +1670,23 @@ function getOrCreateSheet(sheetName) {
   return sheet;
 }
 
+// シート名一覧を返す（デバッグ用）
+function handleListSheets() {
+  const ss = getSpreadsheet();
+  const sheets = ss.getSheets().map(s => ({ name: s.getName(), gid: s.getSheetId(), rows: s.getLastRow() }));
+  return { success: true, sheets };
+}
+
+// gid からシートを取得するヘルパー
+function getSheetByGid(gid) {
+  const ss = getSpreadsheet();
+  const sheets = ss.getSheets();
+  for (const s of sheets) {
+    if (s.getSheetId() === gid) return s;
+  }
+  return null;
+}
+
 function getSheetData(sheetName) {
   const sheet = getOrCreateSheet(sheetName);
   const data = sheet.getDataRange().getValues();
@@ -1744,7 +1698,13 @@ function getSheetData(sheetName) {
     let hasData = false;
     for (let j = 0; j < headers.length; j++) {
       const val = data[i][j];
-      row[headers[j]] = (val === null || val === undefined) ? '' : String(val);
+      if (val === null || val === undefined) { row[headers[j]] = ''; continue; }
+      // Date オブジェクトを yyyy/M/d 形式に変換
+      if (val instanceof Date && !isNaN(val.getTime())) {
+        row[headers[j]] = Utilities.formatDate(val, Session.getScriptTimeZone(), 'yyyy/M/d');
+      } else {
+        row[headers[j]] = String(val);
+      }
       if (val !== '' && val !== null && val !== undefined) hasData = true;
     }
     if (hasData) rows.push(row);
@@ -1798,6 +1758,9 @@ function doGet(e) {
       case 'getAreas': result = handleGetAreas(); break;
       case 'getItems': result = handleGetItems(); break;
       case 'getOrders': result = handleGetOrders(); break;
+      case 'getInventoryLog': result = handleGetInventoryLog(); break;
+      case 'getAllTypedInspections': result = handleGetAllTypedInspections(); break;
+      case 'listSheets': result = handleListSheets(); break;
       default: result = { success: false, error: 'Unknown action: ' + action };
     }
   } catch (error) {
@@ -1831,6 +1794,7 @@ function doPost(e) {
       case 'deleteItem': result = handleDeleteItem(body.id); break;
       case 'saveOrder': result = handleSaveOrder(body.data); break;
       case 'deleteOrder': result = handleDeleteOrder(body.id); break;
+      case 'addInventoryLog': result = handleAddInventoryLog(body.data); break;
       case 'syncAll': result = handleSyncAll(body.data); break;
       case 'updateEquipmentField': result = handleUpdateEquipmentField(body.id, body.field, body.value); break;
       default: result = { success: false, error: 'Unknown action: ' + action };
@@ -2022,7 +1986,19 @@ function handleAddInspection(data) {
 
 function handleAddTypedInspection(sheetName, data) {
   if (!sheetName || !data) return { success: false, error: 'Missing sheetName or data' };
-  const sheet = getOrCreateSheet(sheetName);
+  const ss = getSpreadsheet();
+  // まず名前で検索
+  let sheet = ss.getSheetByName(sheetName);
+  // 名前で見つからなければ gid で検索
+  if (!sheet) {
+    const gidEntry = TYPED_INSPECTION_GIDS.find(e => e.name === sheetName);
+    if (gidEntry) {
+      sheet = getSheetByGid(gidEntry.gid);
+    }
+  }
+  // それでもなければ新規作成
+  if (!sheet) sheet = ss.insertSheet(sheetName);
+
   const keys = Object.keys(data);
   if (sheet.getLastRow() < 1) {
     sheet.getRange(1, 1, 1, keys.length).setValues([keys]);
@@ -2037,7 +2013,7 @@ function handleAddTypedInspection(sheetName, data) {
   });
   const row = headers.map(h => data[h] !== undefined ? data[h] : '');
   sheet.appendRow(row);
-  return { success: true };
+  return { success: true, sheetUsed: sheet.getName() };
 }
 
 // ===== 修理記録 =====
@@ -2050,20 +2026,53 @@ const REPAIR_HEADERS = [
 ];
 
 function handleGetRepairs() {
-  const sheet = getOrCreateSheet(SHEET_NAMES.repair);
+  const ss = getSpreadsheet();
+  // まず名前で検索
+  let sheet = ss.getSheetByName(SHEET_NAMES.repair);
+  // 名前で見つからなければ gid=895124206 で検索
+  if (!sheet) {
+    sheet = getSheetByGid(895124206);
+    // 見つかったら SHEET_NAMES を実際のタブ名に更新（以降のアクセス用）
+    if (sheet) SHEET_NAMES.repair = sheet.getName();
+  }
+  if (!sheet) {
+    sheet = ss.insertSheet(SHEET_NAMES.repair);
+  }
   if (sheet.getLastRow() < 1) {
     sheet.getRange(1, 1, 1, REPAIR_HEADERS.length).setValues([REPAIR_HEADERS]);
     return { success: true, data: [] };
   }
-  return { success: true, data: getSheetData(SHEET_NAMES.repair).rows };
+  const data = sheet.getDataRange().getValues();
+  if (data.length < 2) return { success: true, data: [] };
+  const headers = data[0];
+  const rows = [];
+  for (let i = 1; i < data.length; i++) {
+    const row = {};
+    let hasData = false;
+    for (let j = 0; j < headers.length; j++) {
+      const val = data[i][j];
+      if (val === null || val === undefined) { row[headers[j]] = ''; continue; }
+      if (val instanceof Date && !isNaN(val.getTime())) {
+        row[headers[j]] = Utilities.formatDate(val, Session.getScriptTimeZone(), 'yyyy/M/d');
+      } else {
+        row[headers[j]] = String(val);
+      }
+      if (val !== '' && val !== null && val !== undefined) hasData = true;
+    }
+    if (hasData) rows.push(row);
+  }
+  return { success: true, data: rows, sheetName: sheet.getName() };
 }
 
 function handleAddRepair(data) {
-  const sheet = getOrCreateSheet(SHEET_NAMES.repair);
+  const ss = getSpreadsheet();
+  let sheet = ss.getSheetByName(SHEET_NAMES.repair);
+  if (!sheet) { sheet = getSheetByGid(895124206); if (sheet) SHEET_NAMES.repair = sheet.getName(); }
+  if (!sheet) sheet = ss.insertSheet(SHEET_NAMES.repair);
   if (sheet.getLastRow() < 1) {
     sheet.getRange(1, 1, 1, REPAIR_HEADERS.length).setValues([REPAIR_HEADERS]);
   }
-  sheet.appendRow([
+  const row = [
     data.repairId || ('REP-' + Date.now()),
     data.equipmentId || '', data.equipmentName || '',
     data.receptionDate || '', data.requestDept || '',
@@ -2082,7 +2091,19 @@ function handleAddRepair(data) {
     data.repairCompleted ? 'TRUE' : 'FALSE',
     data.completedDate || '', data.completedStaff || '',
     data.repairStatus || '対応中'
-  ]);
+  ];
+  // 既存レコードがあれば更新、なければ追加
+  const lastRow = sheet.getLastRow();
+  if (lastRow > 1 && data.repairId) {
+    const ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+    for (let i = 0; i < ids.length; i++) {
+      if (String(ids[i][0]) === String(data.repairId)) {
+        sheet.getRange(i + 2, 1, 1, row.length).setValues([row]);
+        return { success: true };
+      }
+    }
+  }
+  sheet.appendRow(row);
   return { success: true };
 }
 
@@ -2258,6 +2279,96 @@ function handleSaveOrder(data) {
 }
 function handleDeleteOrder(id) { return deleteRowById(SHEET_NAMES.orders, id); }
 
+// ===== 入出庫履歴 =====
+const INVLOG_HEADERS = ['記録ID','日時','物品ID','物品名','JANコード','カテゴリ','種別','数量','担当者','備考'];
+const INVLOG_FIELD_MAP = {'記録ID':'logId','日時':'timestamp','物品ID':'itemId','物品名':'itemName','JANコード':'janCode','カテゴリ':'category','種別':'type','数量':'quantity','担当者':'staff','備考':'note'};
+const INVLOG_REVERSE_MAP = {};
+for (const [k,v] of Object.entries(INVLOG_FIELD_MAP)) INVLOG_REVERSE_MAP[v] = k;
+
+function handleGetInventoryLog() {
+  const sheet = getOrCreateSheet(SHEET_NAMES.inventoryLog);
+  if (sheet.getLastRow() < 1) { sheet.getRange(1,1,1,INVLOG_HEADERS.length).setValues([INVLOG_HEADERS]); return {success:true,data:[]}; }
+  const result = getSheetData(SHEET_NAMES.inventoryLog);
+  return {success:true, data: result.rows.map(row => {
+    const obj = {};
+    for (const [k,v] of Object.entries(row)) { obj[INVLOG_FIELD_MAP[k]||k] = v; }
+    return obj;
+  })};
+}
+function handleAddInventoryLog(data) {
+  const sheet = getOrCreateSheet(SHEET_NAMES.inventoryLog);
+  if (sheet.getLastRow() < 1) sheet.getRange(1,1,1,INVLOG_HEADERS.length).setValues([INVLOG_HEADERS]);
+  sheet.appendRow(INVLOG_HEADERS.map(h => data[INVLOG_FIELD_MAP[h]||h] || data[h] || ''));
+  return {success:true};
+}
+
+// ===== 各種点検データ一括取得 =====
+// 各種点検シートの gid 一覧（名前で見つからない場合のフォールバック）
+const TYPED_INSPECTION_GIDS = [
+  { name: '輸液ポンプ点検', gid: 305816429 },
+  { name: 'シリンジポンプ点検', gid: 1915372484 },
+  { name: '人工呼吸器点検', gid: 200938452 },
+  { name: '除細動器点検', gid: 1434266603 },
+  { name: '医用テレメーター点検', gid: 683083212 },
+  { name: 'ベッドサイドモニター点検', gid: 929301363 },
+  { name: '麻酔器点検', gid: 1657040241 },
+  { name: '低圧持続吸引機点検', gid: 1769894837 },
+  { name: 'IABP点検', gid: 1723261589 },
+  { name: 'ECMO_PCPS点検', gid: 1141402612 }
+];
+
+function handleGetAllTypedInspections() {
+  const allData = [];
+  const ss = getSpreadsheet();
+  const allSheets = ss.getSheets();
+
+  // 名前で検索 → gid で検索の順でシートを探す
+  const sheetsToRead = [];
+  // まず名前ベースで探す
+  for (const sheetName of TYPED_INSPECTION_SHEETS) {
+    const sheet = ss.getSheetByName(sheetName);
+    if (sheet && sheet.getLastRow() > 1) {
+      sheetsToRead.push({ sheet, label: sheetName });
+    }
+  }
+  // 名前で見つからなかったものを gid で補完
+  for (const entry of TYPED_INSPECTION_GIDS) {
+    const alreadyFound = sheetsToRead.some(s => s.label === entry.name);
+    if (!alreadyFound) {
+      const sheet = allSheets.find(s => s.getSheetId() === entry.gid);
+      if (sheet && sheet.getLastRow() > 1) {
+        sheetsToRead.push({ sheet, label: entry.name + '(' + sheet.getName() + ')' });
+      }
+    }
+  }
+
+  for (const { sheet, label } of sheetsToRead) {
+    try {
+      const data = sheet.getDataRange().getValues();
+      const headers = data[0];
+      for (let i = 1; i < data.length; i++) {
+        const row = {};
+        let hasData = false;
+        for (let j = 0; j < headers.length; j++) {
+          const val = data[i][j];
+          if (val === null || val === undefined) { row[headers[j]] = ''; continue; }
+          if (val instanceof Date && !isNaN(val.getTime())) {
+            row[headers[j]] = Utilities.formatDate(val, Session.getScriptTimeZone(), 'yyyy/M/d');
+          } else {
+            row[headers[j]] = String(val);
+          }
+          if (val !== '' && val !== null && val !== undefined) hasData = true;
+        }
+        if (!hasData) continue;
+        row._sheetName = label.split('(')[0]; // 正規化された名前
+        row._actualSheetName = sheet.getName();
+        allData.push(row);
+      }
+    } catch(e) { /* シートが存在しない場合はスキップ */ }
+  }
+  return { success: true, data: allData, sheetCount: sheetsToRead.length };
+}
+
 // ===== 全データ取得・同期 =====
 function handleGetAll() {
   return {
@@ -2265,7 +2376,11 @@ function handleGetAll() {
     equipment: handleGetEquipment(), staff: handleGetStaff(),
     departments: handleGetDepartments(), areas: handleGetAreas(),
     lending: handleGetLending(), items: handleGetItems(),
-    orders: handleGetOrders()
+    orders: handleGetOrders(),
+    inspections: handleGetInspections(),
+    repairs: handleGetRepairs(),
+    inventoryLog: handleGetInventoryLog(),
+    typedInspections: handleGetAllTypedInspections()
   };
 }
 
@@ -2505,6 +2620,46 @@ async function pullFromSheets() {
       }
       await new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = rej; });
       totalCount += ordResult.data.length;
+    }
+
+    // ── 点検記録 (inspections) ──
+    const insResult = result.inspections;
+    if (insResult && insResult.success && insResult.data && insResult.data.length > 0) {
+      const tx = db.transaction('inspections', 'readwrite');
+      const store = tx.objectStore('inspections');
+      for (const ins of insResult.data) {
+        const key = ins['点検ID'] || ins.inspId || ins.inspectionId;
+        if (!key) continue;
+        store.put({ ...ins, inspId: key, equipmentId: ins['機器ID'] || ins.equipmentId || '', equipmentName: ins['機器名'] || ins.equipmentName || '', date: ins['点検日'] || ins.date || '', inspector: ins['点検者'] || ins.inspector || '', type: ins['点検種別'] || ins.type || '', result: ins['結果'] || ins.result || '', notes: ins['備考'] || ins.notes || '' });
+      }
+      await new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = rej; });
+      totalCount += insResult.data.length;
+    }
+
+    // ── 各種点検データ (typedInspections) ── saveTypedInspectionsToDb 共通関数を使用
+    const typedResult = result.typedInspections;
+    if (typedResult && typedResult.success && typedResult.data && typedResult.data.length > 0) {
+      await saveTypedInspectionsToDb(typedResult.data);
+      totalCount += typedResult.data.length;
+    }
+
+    // ── 修理記録 (repairs) ── saveRepairsToDb 共通関数を使用
+    const repResult = result.repairs;
+    if (repResult && repResult.success && repResult.data && repResult.data.length > 0) {
+      await saveRepairsToDb(repResult.data);
+      totalCount += repResult.data.length;
+    }
+
+    // ── 入出庫履歴 (inventoryLog) ──
+    const invResult = result.inventoryLog;
+    if (invResult && invResult.success && invResult.data && invResult.data.length > 0) {
+      const tx = db.transaction('inventoryLog', 'readwrite');
+      const store = tx.objectStore('inventoryLog');
+      for (const log of invResult.data) {
+        if (log.logId) store.put(log);
+      }
+      await new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = rej; });
+      totalCount += invResult.data.length;
     }
 
     lastSyncTime = new Date().toISOString();
@@ -3101,7 +3256,7 @@ function showScreen(name) {
   if (navItem) navItem.classList.add('active');
 
   const titles = {
-    lending: '貸出・返却', status: '貸出状況', equipment: '機器一覧',
+    lending: '貸出・返却', status: '貸出状況', equipment: '機器一覧（使用可能機器）',
     inspection: '点検登録', repair: '修理記録', history: '貸出履歴', dashboard: 'ダッシュボード',
     utilization: '稼働率分析',
     'master-equipment': '機器マスター管理', 'master-staff': 'スタッフ管理',
@@ -3698,6 +3853,8 @@ function filterEquipment() {
   const location = document.getElementById('eqLocationFilter').value;
 
   let filtered = allEquipment.filter(eq => {
+    // 使用可能機器のみ表示（廃棄済み・廃棄待ち・デモ/レンタル終了を除外）
+    if (!isEquipmentActive(eq)) return false;
     if (search && !eq.id.toLowerCase().includes(search) &&
         !(eq.name || '').toLowerCase().includes(search) &&
         !(eq.model || '').toLowerCase().includes(search) &&
@@ -4162,8 +4319,17 @@ function renderInspTypeGrid() {
 function populateInspHistTypeFilter() {
   const sel = document.getElementById('inspHistTypeFilter');
   if (!sel) return;
-  sel.innerHTML = '<option value="">全タイプ</option>' +
-    Object.entries(INSPECTION_TYPES).map(([k,t]) => `<option value="${k}">${t.name}</option>`).join('');
+  // INSPECTION_TYPES のキー + Sheets由来のシート名を統合
+  const typeOptions = Object.entries(INSPECTION_TYPES).map(([k,t]) => `<option value="${k}">${t.name}</option>`);
+  // allInspections から Sheets由来の _sheetName を収集して追加
+  const sheetNames = new Set();
+  allInspections.forEach(i => {
+    if (i._sheetName && !Object.values(INSPECTION_TYPES).some(t => t.sheetName === i._sheetName)) {
+      sheetNames.add(i._sheetName);
+    }
+  });
+  sheetNames.forEach(sn => typeOptions.push(`<option value="${sn}">${sn.replace('点検','')}</option>`));
+  sel.innerHTML = '<option value="">全タイプ</option>' + typeOptions.join('');
 }
 
 function detectInspType(eqId) {
@@ -4523,13 +4689,199 @@ async function syncInspectionToGas(inspection, config) {
 }
 
 // ===== Inspection History =====
+// CSV文字列をパースしてオブジェクト配列に変換
+function parseCSV(csvText) {
+  const lines = csvText.split('\n');
+  if (lines.length < 2) return [];
+  // ヘッダー行をパース（ダブルクォート対応）
+  const parseRow = (line) => {
+    const result = [];
+    let current = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (inQuotes) {
+        if (ch === '"' && line[i+1] === '"') { current += '"'; i++; }
+        else if (ch === '"') { inQuotes = false; }
+        else { current += ch; }
+      } else {
+        if (ch === '"') { inQuotes = true; }
+        else if (ch === ',') { result.push(current.trim()); current = ''; }
+        else { current += ch; }
+      }
+    }
+    result.push(current.trim());
+    return result;
+  };
+  const headers = parseRow(lines[0]);
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    const vals = parseRow(line);
+    const obj = {};
+    headers.forEach((h, idx) => { if (h) obj[h] = vals[idx] || ''; });
+    rows.push(obj);
+  }
+  return rows;
+}
+
+// Google Sheets から各点検シートのデータを CSV で直接取得（GAS不要）
+async function fetchInspectionSheetsDirectly() {
+  const allData = [];
+  const entries = Object.entries(INSPECTION_TYPES);
+  // 並列で全シートを取得
+  const promises = entries.map(async ([key, config]) => {
+    if (!config.gid) return [];
+    const url = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:csv&gid=${config.gid}&headers=1`;
+    try {
+      const resp = await fetch(url);
+      if (!resp.ok) {
+        console.warn(`[Inspections] CSV取得失敗: ${config.sheetName} (HTTP ${resp.status})`);
+        return [];
+      }
+      const text = await resp.text();
+      const rows = parseCSV(text);
+      console.log(`[Inspections] ${config.sheetName}: ${rows.length}件取得`);
+      // _sheetName を付与
+      return rows.map(r => ({ ...r, _sheetName: config.sheetName }));
+    } catch (e) {
+      console.warn(`[Inspections] ${config.sheetName} 取得エラー:`, e.message);
+      return [];
+    }
+  });
+  const results = await Promise.all(promises);
+  for (const rows of results) {
+    allData.push(...rows);
+  }
+  return allData;
+}
+
 async function renderInspHistory() {
+  // Sheets から各種点検データを取得して IndexedDB を更新
+  if (syncEnabled) {
+    let fetched = 0;
+    // まず GAS 経由を試行
+    if (GAS_URL) {
+      try {
+        const typedResult = await gasGet('getAllTypedInspections');
+        console.log('[Inspections] GAS応答: sheetCount=', typedResult?.sheetCount, 'data=', typedResult?.data?.length);
+        if (typedResult && typedResult.success && typedResult.data && typedResult.data.length > 0) {
+          await saveTypedInspectionsToDb(typedResult.data);
+          fetched = typedResult.data.length;
+        }
+      } catch (e) {
+        console.warn('[Inspections] GAS経由取得失敗:', e.message, '→ CSV直接取得にフォールバック');
+      }
+    }
+    // GAS で取得できなかった場合、CSV直接取得
+    if (fetched === 0) {
+      try {
+        const csvData = await fetchInspectionSheetsDirectly();
+        if (csvData.length > 0) {
+          await saveTypedInspectionsToDb(csvData);
+          fetched = csvData.length;
+        }
+      } catch (e) {
+        console.warn('[Inspections] CSV直接取得エラー:', e.message);
+      }
+    }
+    if (fetched > 0) {
+      showToast(`点検履歴: Sheetsから${fetched}件取得`, 'success');
+    }
+  }
   const inspections = await dbGetAll('inspections');
   allInspections = inspections.sort((a,b) => (b.createdAt||b.date||'').localeCompare(a.createdAt||a.date||''));
+  populateInspHistTypeFilter();
   filterInspHistory();
 }
 
+// 各種点検データを IndexedDB に保存する共通関数
+async function saveTypedInspectionsToDb(dataArr) {
+  const tx = db.transaction('inspections', 'readwrite');
+  const store = tx.objectStore('inspections');
+  let idx = 0;
+  for (const row of dataArr) {
+    idx++;
+    const sheetName = row._sheetName || '';
+
+    // INSPECTION_TYPES から config を逆引き
+    const config = Object.entries(INSPECTION_TYPES).find(([k, t]) => t.sheetName === sheetName);
+
+    // 機器IDフィールド: config の idField を優先、なければ '機器ID' / '機器コード' をフォールバック
+    const idFieldName = config ? config[1].idField : '機器ID';
+    const eqId = row[idFieldName] || row['機器ID'] || row['機器コード'] || '';
+    const date = row['点検日'] || '';
+    // inspId がない場合は自動生成（シート名+機器ID+日付+連番）
+    const key = row['点検ID'] || row.inspId
+      || `INSP-${sheetName.replace(/点検/,'')}-${eqId}-${date.replace(/\//g,'')}-${idx}`;
+
+    // 点検者フィールド: config の inspectorField を優先
+    const inspFieldName = config ? config[1].inspectorField : '点検者';
+    const typeKey = config ? config[0] : '';
+
+    // 点検項目をフィールド config に合わせて labelValues にマッピング
+    const labelValues = {};
+    if (config) {
+      config[1].fields.forEach(f => {
+        if (f.type === 'checkbox_all') return;
+        // ラベル名でマッチ
+        if (row[f.label] !== undefined && row[f.label] !== '') {
+          labelValues[f.label] = row[f.label];
+        }
+        // key名でマッチ
+        if (row[f.key] !== undefined && row[f.key] !== '') {
+          labelValues[f.label] = row[f.key];
+        }
+      });
+    }
+
+    store.put({
+      ...row,
+      inspId: key,
+      equipmentId: eqId,
+      equipmentName: row['機器名'] || row['機器名称'] || '',
+      date: date,
+      inspector: row[inspFieldName] || row['点検者'] || row['登録者'] || '',
+      category: row['点検区分'] || row['点検種別'] || '',
+      type: sheetName.replace('点検', ''),
+      equipmentType: typeKey,
+      equipmentTypeName: sheetName.replace('点検', ''),
+      _sheetName: sheetName,
+      _fromSheets: true,
+      labelValues: Object.keys(labelValues).length > 0 ? labelValues : undefined,
+      allOk: config ? config[1].fields.filter(f => f.type === 'check').every(f => {
+        const v = row[f.label] || row[f.key] || '';
+        return v === 'TRUE' || v === 'true' || v === 'OK' || v === '1' || v === 'Yes';
+      }) : false
+    });
+  }
+  await new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = rej; });
+}
+
 let allInspections = [];
+
+function getInspTypeName(insp) {
+  // INSPECTION_TYPES のキー一致
+  if (insp.equipmentType && INSPECTION_TYPES[insp.equipmentType]) return INSPECTION_TYPES[insp.equipmentType].name;
+  // _sheetName からの逆引き（Sheets由来データ）
+  if (insp._sheetName) {
+    const found = Object.values(INSPECTION_TYPES).find(t => t.sheetName === insp._sheetName);
+    if (found) return found.name;
+    return insp._sheetName.replace('点検', '');
+  }
+  // type フィールド
+  if (insp.type) return insp.type;
+  return '不明';
+}
+function getInspIcon(insp) {
+  if (insp.equipmentType && INSPECTION_TYPES[insp.equipmentType]) return INSPECTION_TYPES[insp.equipmentType].icon;
+  if (insp._sheetName) {
+    const found = Object.values(INSPECTION_TYPES).find(t => t.sheetName === insp._sheetName);
+    if (found) return found.icon;
+  }
+  return '\u2705';
+}
 
 function filterInspHistory() {
   const search = (document.getElementById('inspHistSearch')?.value||'').trim().toLowerCase();
@@ -4538,34 +4890,42 @@ function filterInspHistory() {
   const dateTo = document.getElementById('inspHistDateTo')?.value || '';
 
   let filtered = allInspections;
-  if (search) filtered = filtered.filter(i => (i.equipmentId||'').toLowerCase().includes(search));
-  if (typeFilter) filtered = filtered.filter(i => i.equipmentType === typeFilter);
+  if (search) filtered = filtered.filter(i => (i.equipmentId||'').toLowerCase().includes(search) || (i.equipmentName||'').toLowerCase().includes(search));
+  if (typeFilter) filtered = filtered.filter(i =>
+    i.equipmentType === typeFilter || i._sheetName === typeFilter || getInspTypeName(i) === typeFilter
+  );
   if (dateFrom) filtered = filtered.filter(i => (i.date||'') >= dateFrom);
   if (dateTo) filtered = filtered.filter(i => (i.date||'') <= dateTo);
 
   const container = document.getElementById('inspHistoryList');
+
+  // 件数表示
+  const countHtml = `<div style="margin-bottom:10px;font-size:13px;color:var(--gray-500)">${filtered.length}件の点検記録</div>`;
+
   if (filtered.length === 0) {
-    container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--gray-400)">点検履歴がありません</div>';
+    container.innerHTML = countHtml + '<div style="text-align:center;padding:40px;color:var(--gray-400)">点検履歴がありません</div>';
     return;
   }
 
-  container.innerHTML = filtered.slice(0,100).map(insp => {
-    const typeName = insp.equipmentTypeName || (INSPECTION_TYPES[insp.equipmentType]?.name) || insp.type || '不明';
-    const icon = INSPECTION_TYPES[insp.equipmentType]?.icon || '\u2705';
-    return `<div class="insp-history-item" onclick="showInspDetail('${insp.inspId}')">
+  container.innerHTML = countHtml + filtered.slice(0, 200).map(insp => {
+    const typeName = getInspTypeName(insp);
+    const icon = getInspIcon(insp);
+    return `<div class="insp-history-item" onclick="showInspDetail('${(insp.inspId||'').replace(/'/g,'\\&#39;')}')">
       <div style="display:flex;align-items:center;justify-content:space-between">
         <div>
           <span style="font-size:18px;margin-right:6px">${icon}</span>
-          <strong style="color:var(--primary)">${insp.equipmentId}</strong>
-          <span style="margin-left:8px;font-size:13px;color:var(--gray-500)">${typeName}</span>
+          <strong style="color:var(--primary)">${insp.equipmentId||'-'}</strong>
+          <span style="margin-left:6px;font-size:12px;color:var(--gray-600)">${insp.equipmentName||''}</span>
+          <span style="margin-left:8px;font-size:12px;color:var(--gray-400);background:var(--gray-50);padding:1px 8px;border-radius:10px">${typeName}</span>
         </div>
         <div style="text-align:right">
           <div style="font-size:13px;font-weight:600">${insp.date||''}</div>
-          <div style="font-size:12px;color:var(--gray-400)">${insp.inspector||insp.staffId||''}</div>
+          <div style="font-size:12px;color:var(--gray-400)">${insp.inspector||insp.staffId||insp['点検者']||''}</div>
         </div>
       </div>
       <div style="margin-top:4px;font-size:12px;color:var(--gray-500)">
         ${insp.category||''} ${insp.allOk?'<span style="color:var(--success);font-weight:600">全項目OK</span>':''}
+        ${insp._fromSheets?'<span style="color:var(--info);font-size:11px;margin-left:6px">[Sheets]</span>':''}
       </div>
     </div>`;
   }).join('');
@@ -4575,30 +4935,37 @@ async function showInspDetail(inspId) {
   const insp = allInspections.find(i => i.inspId === inspId);
   if (!insp) return;
 
-  const config = INSPECTION_TYPES[insp.equipmentType];
-  const typeName = insp.equipmentTypeName || config?.name || '不明';
+  const config = INSPECTION_TYPES[insp.equipmentType] ||
+    (insp._sheetName ? Object.values(INSPECTION_TYPES).find(t => t.sheetName === insp._sheetName) : null);
+  const typeName = getInspTypeName(insp);
 
   document.getElementById('modalTitle').textContent = typeName + ' 点検詳細';
 
   let html = `<div class="detail-grid">
-    <div class="detail-item"><div class="label">機器ID</div><div class="value">${insp.equipmentId}</div></div>
+    <div class="detail-item"><div class="label">機器ID</div><div class="value">${insp.equipmentId||'-'}</div></div>
     <div class="detail-item"><div class="label">機器名</div><div class="value">${insp.equipmentName||'-'}</div></div>
+    <div class="detail-item"><div class="label">点検種別</div><div class="value">${typeName}</div></div>
     <div class="detail-item"><div class="label">点検日</div><div class="value">${insp.date||''}</div></div>
     <div class="detail-item"><div class="label">点検区分</div><div class="value">${insp.category||''}</div></div>
-    <div class="detail-item"><div class="label">点検者</div><div class="value">${insp.inspector||''}</div></div>
-    <div class="detail-item"><div class="label">全項目OK</div><div class="value">${insp.allOk?'はい':'いいえ'}</div></div>
+    <div class="detail-item"><div class="label">点検者</div><div class="value">${insp.inspector||insp['点検者']||''}</div></div>
+    ${typeof insp.allOk !== 'undefined' ? `<div class="detail-item"><div class="label">全項目OK</div><div class="value">${insp.allOk?'はい':'いいえ'}</div></div>` : ''}
   </div>`;
 
+  // ── 点検項目の表示（ローカル・Sheets両対応）──
+  const formatCheckVal = (v) => {
+    const s = String(v || '');
+    if (s === 'TRUE' || s === 'true' || s === 'OK' || s === 'Yes' || s === '1') return '<span style="color:var(--success);font-weight:700">OK</span>';
+    if (s === 'FALSE' || s === 'false' || s === '' || s === '0' || s === 'No') return '<span style="color:var(--gray-400)">-</span>';
+    return s;
+  };
+
   if (insp.labelValues && config) {
+    // config の fields 定義に沿って表示
     html += '<div style="margin-top:16px"><h4 style="font-size:14px;margin-bottom:8px">点検項目</h4>';
     config.fields.forEach(f => {
       if (f.type === 'checkbox_all') return;
       const val = insp.labelValues[f.label] || '';
-      const isCheck = f.type === 'check';
-      let displayVal = val;
-      if (isCheck) {
-        displayVal = val === 'TRUE' ? '<span style="color:var(--success);font-weight:700">OK</span>' : '<span style="color:var(--gray-400)">-</span>';
-      }
+      const displayVal = f.type === 'check' ? formatCheckVal(val) : (val || '-');
       html += `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--gray-100);font-size:13px">
         <span>${f.label}</span><span>${displayVal}</span>
       </div>`;
@@ -4612,6 +4979,27 @@ async function showInspDetail(inspId) {
       </div>`;
     });
     html += '</div>';
+  }
+  // ── Sheets由来データ: 全カラムをそのまま表示 ──
+  if (insp._fromSheets) {
+    const skipKeys = new Set([
+      'inspId','equipmentId','equipmentName','date','inspector','type','equipmentType',
+      'equipmentTypeName','_sheetName','_actualSheetName','_fromSheets','category','allOk','labelValues',
+      '点検ID','機器ID','機器名','点検日','点検者','点検種別','点検区分','createdAt'
+    ]);
+    const entries = Object.entries(insp).filter(([k,v]) =>
+      !skipKeys.has(k) && v !== '' && v !== undefined && v !== null && !k.startsWith('_')
+      && typeof v !== 'object'
+    );
+    if (entries.length > 0) {
+      html += '<div style="margin-top:16px"><h4 style="font-size:14px;margin-bottom:8px">点検詳細（Sheetsデータ）</h4>';
+      entries.forEach(([k, v]) => {
+        html += `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--gray-100);font-size:13px">
+          <span>${k}</span><span>${formatCheckVal(v)}</span>
+        </div>`;
+      });
+      html += '</div>';
+    }
   }
 
   document.getElementById('modalBody').innerHTML = html;
@@ -4705,7 +5093,87 @@ function getRepairConditionBadge(cond) {
 }
 
 async function renderRepairs() {
+  // Sheets から修理データを直接取得して IndexedDB を更新
+  if (syncEnabled && GAS_URL) {
+    try {
+      const repResult = await gasGet('getRepairs');
+      console.log('[Repairs] GAS応答:', JSON.stringify(repResult).substring(0, 500));
+      if (repResult && repResult.success && repResult.data && repResult.data.length > 0) {
+        // 取得成功 → IndexedDB に保存
+        await saveRepairsToDb(repResult.data);
+        showToast(`修理記録: Sheetsから${repResult.data.length}件取得`, 'success');
+      } else if (repResult && repResult.success && (!repResult.data || repResult.data.length === 0)) {
+        // 0件の場合 → シート名一覧を取得してデバッグ
+        console.warn('[Repairs] Sheetsから0件。シート名を確認中...');
+        try {
+          const sheetsInfo = await gasGet('listSheets');
+          if (sheetsInfo && sheetsInfo.sheets) {
+            const names = sheetsInfo.sheets.map(s => `${s.name}(gid:${s.gid}, ${s.rows}行)`);
+            console.log('[Repairs] スプレッドシートのタブ一覧:', names.join(', '));
+            showToast('修理記録シートが空か見つかりません。コンソールでシート一覧を確認してください。', 'error', 5000);
+          }
+        } catch(e2) { console.warn('listSheets未対応:', e2.message); }
+      }
+    } catch (e) {
+      console.warn('[Repairs] Sheets取得エラー:', e.message);
+    }
+  }
   await filterRepairs();
+}
+
+// 修理データを IndexedDB に保存する共通関数
+// Sheets のカラム名とアプリ内フィールド名の両方に対応
+async function saveRepairsToDb(dataArr) {
+  const tx = db.transaction('repairs', 'readwrite');
+  const store = tx.objectStore('repairs');
+  let idx = 0;
+  for (const r of dataArr) {
+    // repairId: 修理ID カラムがない場合は機器ID+受付日から生成
+    const key = r['修理ID'] || r.repairId
+      || `REP-${(r['機器ID']||r.equipmentId||'X')}-${(r['受付日']||r.receptionDate||idx).toString().replace(/\//g,'')}`;
+    idx++;
+
+    // 修理完了判定: TRUE/FALSE, Yes/No, 完了 すべて対応
+    const completedRaw = r['修理完了'] || r.repairCompleted || '';
+    const isCompleted = completedRaw === true || completedRaw === 'TRUE' || completedRaw === 'true'
+      || completedRaw === 'Yes' || completedRaw === 'yes' || completedRaw === '完了';
+
+    store.put({
+      ...r,
+      repairId: key,
+      equipmentId: r['機器ID'] || r.equipmentId || '',
+      equipmentName: r['機器名'] || r.equipmentName || '',
+      receptionDate: r['受付日'] || r.receptionDate || '',
+      date: r['受付日'] || r.receptionDate || r.date || '',
+      receptionStaff: r['受付担当者'] || r.receptionStaff || '',
+      requestDept: r['依頼部署'] || r.requestDept || '',
+      occurrenceDate: r['発生日'] || r.occurrenceDate || '',
+      occurrence: r['発生状況'] || r.occurrence || '',
+      description: r['詳細内容'] || r.description || '',
+      workCategory: r['作業区分'] || r.workCategory || '',
+      condition: r['状態'] || r['結果'] || r.condition || '',
+      action: r['修理内容'] || r['修理点検内容'] || r.action || '',
+      estimateRequest: r['見積もり依頼'] === 'TRUE' || r['見積り依頼'] === 'Yes' || r['見積り依頼'] === 'TRUE' || r.estimateRequest === true,
+      inspectionRequest: r['修理点検依頼'] === 'TRUE' || r['修理点検依頼'] === 'Yes' || r.inspectionRequest === true,
+      cost: r['金額'] || r['修理費'] || r.cost || '',
+      part1: r['交換部品1'] || r['交換部品①'] || r.part1 || '',
+      partPrice1: r['部品単価1'] || r['スキャン用1'] || r.partPrice1 || '',
+      part2: r['交換部品2'] || r['交換部品②'] || r.part2 || '',
+      partPrice2: r['部品単価2'] || r['スキャン用2'] || r.partPrice2 || '',
+      part3: r['交換部品3'] || r['交換部品③'] || r.part3 || '',
+      partPrice3: r['部品単価3'] || r['スキャン用3'] || r.partPrice3 || '',
+      part4: r['交換部品4'] || r['交換部品④'] || r.part4 || '',
+      partPrice4: r['部品単価4'] || r['スキャン用4'] || r.partPrice4 || '',
+      part5: r['交換部品5'] || r['交換部品⑤'] || r.part5 || '',
+      partPrice5: r['部品単価5'] || r['スキャン用5'] || r.partPrice5 || '',
+      partsTotal: r['部品合計金額'] || r.partsTotal || '',
+      repairCompleted: isCompleted,
+      completedDate: r['修理完了日'] || r.completedDate || '',
+      completedStaff: r['修理完了時担当'] || r.completedStaff || '',
+      repairStatus: r['ステータス'] || r.repairStatus || (isCompleted ? '完了' : '対応中')
+    });
+  }
+  await new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = rej; });
 }
 
 async function showRepairForm(existingRepair) {
@@ -5012,6 +5480,13 @@ async function submitRepair(editId) {
   };
 
   await dbPut('repairs', repair);
+
+  // Sheets同期
+  if (syncEnabled) {
+    try { await gasPost('addRepair', { data: repair }); }
+    catch(e) { queueSync('addRepair', { data: repair }); }
+  }
+
   closeModal();
   document.getElementById('modal').style.maxWidth = '600px';
   renderRepairs();
@@ -7345,6 +7820,12 @@ async function submitInventory(type) {
   };
 
   await dbPut('inventoryLog', log);
+
+  // Sheets同期
+  if (syncEnabled) {
+    gasPost('addInventoryLog', { data: { logId: log.logId, timestamp: log.date, itemId: log.itemId, itemName: log.itemName, janCode: log.janCode, category: log.category, type: log.type, quantity: log.quantity, staff: log.staff, note: log.note } }).catch(e => console.warn('inventoryLog sync error:', e));
+  }
+
   closeModal();
   filterInventoryLog();
   showToast(`${log.type}を登録しました: ${log.itemName} x${qty}`, 'success');
@@ -7611,7 +8092,19 @@ function renderOrderList() {
     return;
   }
   tbody.innerHTML = filteredOrders.map(o => {
-    const item = allItems.find(it => it.janCode === o.janCode);
+    // JANコード解決: janCode が物品IDの場合は物品マスタから実際のJANコードを取得
+    let resolvedJan = o.janCode || '';
+    let item = allItems.find(it => it.janCode === resolvedJan);
+    if (!item && resolvedJan) {
+      // janCode フィールドに物品IDが入っている場合を補正
+      const byItemId = allItems.find(it => it.itemId === resolvedJan);
+      if (byItemId) { item = byItemId; resolvedJan = byItemId.janCode || resolvedJan; }
+      // scanCode で一致する物品を探す
+      if (!item) {
+        const byScan = allItems.find(it => it.scanCode === resolvedJan);
+        if (byScan) { item = byScan; resolvedJan = byScan.janCode || resolvedJan; }
+      }
+    }
     const name = (item ? item.productName : o.productName) || '-';
     const price = Number(item ? item.unitPrice : o.unitPrice) || 0;
     const unit = (item ? item.orderUnit : o.orderUnit) || '';
@@ -7620,9 +8113,17 @@ function renderOrderList() {
     const statusBadge = o.status === '未発注' ? '<span class="badge" style="background:#fef3c7;color:#92400e">未発注</span>'
       : o.status === '発注済み' ? '<span class="badge" style="background:#dbeafe;color:#1e40af">発注済み</span>'
       : '<span class="badge" style="background:#d1fae5;color:#065f46">入荷済み</span>';
+    // 日付フォーマット: Date文字列やISO文字列を yyyy/M/d に変換
+    let dateStr = o.date || '';
+    if (dateStr && (dateStr.includes('GMT') || dateStr.includes('T') || dateStr.length > 10)) {
+      try {
+        const d = new Date(dateStr);
+        if (!isNaN(d.getTime())) dateStr = `${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()}`;
+      } catch(e) {}
+    }
     return `<tr>
       <td><input type="checkbox" class="order-check" value="${o.orderId}"></td>
-      <td>${o.date || ''}</td><td style="font-size:12px">${o.janCode || ''}</td><td>${name}</td>
+      <td>${dateStr}</td><td style="font-size:12px">${resolvedJan}</td><td>${name}</td>
       <td>${qty}</td><td>${unit}</td><td>¥${amount.toLocaleString()}</td>
       <td>${statusBadge}</td><td style="font-size:12px;max-width:120px;overflow:hidden;text-overflow:ellipsis">${o.remarks || ''}</td>
       <td style="white-space:nowrap">

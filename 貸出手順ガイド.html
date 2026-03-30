@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>ME機器管理システム 貸出・返却手順ガイド</title>
+<style>
+  @page { size: A4 portrait; margin: 12mm 14mm 10mm 14mm; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Yu Gothic', 'Meiryo', 'Hiragino Sans', sans-serif;
+    font-size: 10.5px; line-height: 1.5; color: #1a1a2e;
+    width: 210mm; min-height: 297mm; margin: auto;
+    padding: 12mm 14mm 10mm 14mm; background: #fff;
+  }
+  @media print {
+    body { padding: 0; width: auto; min-height: auto; }
+    .no-print { display: none !important; }
+  }
+
+  /* ヘッダー */
+  .header {
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 3px solid #1565c0; padding-bottom: 8px; margin-bottom: 10px;
+  }
+  .header-left { display: flex; align-items: center; gap: 10px; }
+  .header-icon { font-size: 28px; }
+  .header h1 { font-size: 18px; color: #1565c0; letter-spacing: 1px; }
+  .header-sub { font-size: 10px; color: #666; text-align: right; }
+
+  /* セクション */
+  .section { margin-bottom: 8px; }
+  .section-title {
+    font-size: 12px; font-weight: 700; color: #fff; background: #1565c0;
+    padding: 4px 10px; border-radius: 4px; margin-bottom: 6px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .section-title.green { background: #2e7d32; }
+  .section-title.orange { background: #e65100; }
+  .section-title.purple { background: #6a1b9a; }
+
+  /* ステップ */
+  .steps { display: flex; gap: 6px; flex-wrap: wrap; }
+  .step {
+    flex: 1; min-width: 120px; background: #f5f8ff; border: 1px solid #c8d6f0;
+    border-radius: 6px; padding: 7px 8px; position: relative;
+  }
+  .step-num {
+    position: absolute; top: -8px; left: 8px;
+    background: #1565c0; color: #fff; font-size: 10px; font-weight: 700;
+    width: 20px; height: 20px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .step-num.green { background: #2e7d32; }
+  .step-num.orange { background: #e65100; }
+  .step-title { font-size: 10px; font-weight: 700; margin-top: 8px; margin-bottom: 2px; color: #1565c0; }
+  .step-title.green { color: #2e7d32; }
+  .step-title.orange { color: #e65100; }
+  .step-body { font-size: 9.5px; color: #333; }
+  .step-icon { font-size: 20px; text-align: center; margin: 2px 0; }
+  .step-key { display: inline-block; background: #1565c0; color: #fff; padding: 1px 6px; border-radius: 3px; font-size: 9px; font-weight: 600; }
+  .step-key.warn { background: #e65100; }
+  .step-key.green { background: #2e7d32; }
+
+  /* フローチャート矢印 */
+  .arrow { text-align: center; font-size: 16px; color: #1565c0; margin: 0 2px; flex: 0 0 20px; display: flex; align-items: center; justify-content: center; }
+
+  /* 2カラム */
+  .two-col { display: flex; gap: 10px; }
+  .two-col > div { flex: 1; }
+
+  /* ヒントボックス */
+  .hint-box {
+    background: #fff8e1; border: 1px solid #ffe082; border-radius: 5px;
+    padding: 6px 8px; font-size: 9.5px; margin-top: 4px;
+  }
+  .hint-box.blue { background: #e3f2fd; border-color: #90caf9; }
+  .hint-box.red { background: #fce4ec; border-color: #ef9a9a; }
+
+  /* テーブル */
+  .info-table { width: 100%; border-collapse: collapse; font-size: 9.5px; }
+  .info-table th { background: #e8eaf6; padding: 4px 6px; text-align: left; font-weight: 600; border: 1px solid #c5cae9; }
+  .info-table td { padding: 4px 6px; border: 1px solid #c5cae9; }
+  .info-table tr:nth-child(even) td { background: #f5f5f5; }
+
+  /* バッジ */
+  .badge { display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 9px; font-weight: 600; }
+  .badge-blue { background: #e3f2fd; color: #1565c0; }
+  .badge-green { background: #e8f5e9; color: #2e7d32; }
+  .badge-orange { background: #fff3e0; color: #e65100; }
+  .badge-red { background: #fce4ec; color: #c62828; }
+
+  /* 画面イラスト */
+  .screen-mock {
+    border: 2px solid #c5cae9; border-radius: 8px; padding: 6px 8px;
+    background: linear-gradient(135deg, #f5f7ff 0%, #eef1f9 100%);
+    font-size: 9px;
+  }
+  .screen-mock .mock-bar { background: #1565c0; color: #fff; padding: 3px 8px; border-radius: 4px; font-size: 9px; margin-bottom: 5px; font-weight: 600; }
+  .mock-area-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px; }
+  .mock-area { background: #fff; border: 1px solid #c5cae9; border-radius: 4px; text-align: center; padding: 3px; font-size: 8px; }
+  .mock-area.selected { border-color: #1565c0; background: #e3f2fd; font-weight: 700; }
+  .mock-input { display: flex; gap: 3px; margin-bottom: 5px; }
+  .mock-input span { flex: 1; background: #fff; border: 1px solid #ccc; border-radius: 3px; padding: 2px 5px; font-size: 8px; color: #999; }
+  .mock-btn { background: #1565c0; color: #fff; border: none; border-radius: 3px; padding: 2px 6px; font-size: 8px; font-weight: 600; cursor: default; }
+  .mock-btn.warn { background: #e65100; }
+
+  .footer { text-align: center; font-size: 8px; color: #999; margin-top: 6px; border-top: 1px solid #ddd; padding-top: 4px; }
+
+  /* 印刷ボタン */
+  .print-btn {
+    position: fixed; top: 10px; right: 10px; z-index: 9999;
+    background: #1565c0; color: #fff; border: none; padding: 10px 20px;
+    border-radius: 8px; font-size: 14px; cursor: pointer; font-weight: 700;
+    box-shadow: 0 2px 8px rgba(0,0,0,.3);
+  }
+  .print-btn:hover { background: #0d47a1; }
+</style>
+</head>
+<body>
+
+<button class="print-btn no-print" onclick="window.print()">PDF保存 / 印刷</button>
+
+<!-- ===== ヘッダー ===== -->
+<div class="header">
+  <div class="header-left">
+    <div class="header-icon">&#128e5;</div>
+    <div>
+      <h1>ME機器管理システム &#8212; 貸出・返却 操作ガイド</h1>
+      <div style="font-size:10px;color:#555;margin-top:1px">Medical Equipment Lending/Return Quick Reference</div>
+    </div>
+  </div>
+  <div class="header-sub">
+    ME管理室<br>
+    Rev.1 / 2026-03
+  </div>
+</div>
+
+<!-- ===== 貸出手順 ===== -->
+<div class="section">
+  <div class="section-title">&#128230; 貸出手順（通常モード）</div>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-icon">&#127970;</div>
+      <div class="step-title">貸出先エリアを選択</div>
+      <div class="step-body">画面下部のエリアグリッドから<strong>貸出先</strong>（例: 3階西病棟、手術室 等）をタップ。<br>選択すると青枠で強調され、上部に <span class="badge badge-blue">&#127968; 貸出先: ○○</span> と表示されます。</div>
+    </div>
+    <div class="arrow">&#10132;</div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-icon">&#128247;</div>
+      <div class="step-title">機器IDをスキャン / 入力</div>
+      <div class="step-body">バーコードリーダーで機器のQR/バーコードを読み取るか、IDを手入力して <span class="step-key">&#128230; 貸出</span> をタップ。<br>QRカメラ <span class="step-key" style="background:#555">&#128247;</span> ボタンでもスキャン可。</div>
+    </div>
+    <div class="arrow">&#10132;</div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-icon">&#9989;</div>
+      <div class="step-title">確認ダイアログで確定</div>
+      <div class="step-body">機器名・ID・貸出先が表示されます。内容を確認して <span class="step-key">&#128230; 貸出を確定</span> をタップ。<br>
+      <span style="color:#2e7d32;font-weight:600">&#10004; 完了トースト</span>が出れば貸出成功です。</div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 返却手順 ===== -->
+<div class="section">
+  <div class="section-title green">&#8617; 返却手順</div>
+  <div class="steps">
+    <div class="step" style="border-color:#a5d6a7;background:#f1f8e9">
+      <div class="step-num green">1</div>
+      <div class="step-icon">&#128247;</div>
+      <div class="step-title green">機器IDをスキャン / 入力</div>
+      <div class="step-body">返却する機器のQR/バーコードを読み取るか、IDを手入力。<br>
+      <span class="step-key warn">&#8617; 返却</span> ボタンをタップ。<br>
+      <span style="font-size:8.5px;color:#666">&#8251; 貸出ボタンで貸出中機器を読み取ると自動で返却確認に遷移します</span></div>
+    </div>
+    <div class="arrow" style="color:#2e7d32">&#10132;</div>
+    <div class="step" style="border-color:#a5d6a7;background:#f1f8e9">
+      <div class="step-num green">2</div>
+      <div class="step-icon">&#9989;</div>
+      <div class="step-title green">返却確認で確定</div>
+      <div class="step-body">現在の貸出先と機器情報が表示されます。<br>
+      <span class="step-key green">&#8617; 返却する</span> をタップすると保管場所（ME室等）へ返却されます。<br>
+      <span style="font-size:8.5px;color:#666">&#8251; エリア選択は不要です（自動的に登録保管場所に戻ります）</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 連続スキャンモード + 画面イメージ ===== -->
+<div class="two-col">
+  <div>
+    <div class="section">
+      <div class="section-title purple">&#9889; 連続スキャンモード（大量貸出時）</div>
+      <div style="font-size:9.5px;padding:4px 0">
+        複数台を同じエリアにまとめて貸し出す場合に便利です。
+      </div>
+      <div class="steps" style="flex-direction:column;gap:4px">
+        <div style="display:flex;align-items:center;gap:6px;font-size:9.5px">
+          <span class="badge badge-blue" style="min-width:20px;text-align:center">1</span>
+          <span>エリアを選択</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;font-size:9.5px">
+          <span class="badge badge-blue" style="min-width:20px;text-align:center">2</span>
+          <span>「<strong>&#9889; 連続スキャンモード</strong>」にチェック &#10004;</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;font-size:9.5px">
+          <span class="badge badge-blue" style="min-width:20px;text-align:center">3</span>
+          <span>機器を<strong>スキャンするだけ</strong>で即貸出（確認なし）</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;font-size:9.5px">
+          <span class="badge badge-blue" style="min-width:20px;text-align:center">4</span>
+          <span>完了したらチェックを外して終了</span>
+        </div>
+      </div>
+      <div class="hint-box" style="margin-top:6px">
+        &#128161; QRカメラ <span class="step-key" style="background:#555;font-size:8px">&#128247;</span> と組み合わせるとカメラが閉じずに連続スキャンできます
+      </div>
+    </div>
+
+    <!-- ステータス一覧 -->
+    <div class="section" style="margin-top:6px">
+      <div class="section-title orange">&#128203; 機器ステータス一覧</div>
+      <table class="info-table">
+        <tr><th>ステータス</th><th>意味</th><th>貸出</th></tr>
+        <tr><td><span class="badge badge-green">&#11044; 保管中</span></td><td>ME室等で保管中</td><td>&#9898; 可能</td></tr>
+        <tr><td><span class="badge badge-blue">&#11044; 貸出中</span></td><td>貸出先で使用中</td><td>&#10060; 不可（先に返却）</td></tr>
+        <tr><td><span class="badge badge-orange">&#11044; 修理中</span></td><td>修理・点検対応中</td><td>&#10060; 不可</td></tr>
+        <tr><td><span class="badge badge-red">&#11044; 廃棄済</span></td><td>廃棄処理済み</td><td>&#10060; 不可</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- 画面イメージ -->
+  <div>
+    <div class="section">
+      <div style="font-size:10px;font-weight:700;color:#1565c0;margin-bottom:4px">&#128187; 画面イメージ</div>
+      <div class="screen-mock">
+        <div class="mock-bar">&#128274; バーコード / 機器ID 入力 &nbsp;&nbsp; <span style="font-size:8px;background:rgba(255,255,255,.3);padding:1px 5px;border-radius:3px">&#127968; 貸出先: 3階西病棟</span></div>
+        <div class="mock-input">
+          <span>機器IDをスキャンまたは入力...</span>
+          <button class="mock-btn">&#128230; 貸出</button>
+          <button class="mock-btn warn">&#8617; 返却</button>
+          <button class="mock-btn" style="background:#555">&#128247;</button>
+        </div>
+        <div style="font-size:8px;margin-bottom:4px;display:flex;align-items:center;gap:4px">
+          <input type="checkbox" style="margin:0" disabled> <span>&#9889; 連続スキャンモード</span>
+        </div>
+        <div style="font-size:8px;font-weight:600;margin-bottom:3px;color:#555">&#127970; 貸出先エリアを選択</div>
+        <div class="mock-area-grid">
+          <div class="mock-area selected">&#127973; 3階西病棟<br><span style="color:#1565c0">貸出中:3台</span></div>
+          <div class="mock-area">&#127973; 3階東病棟<br><span style="color:#999">貸出中:0台</span></div>
+          <div class="mock-area">&#128657; 手術室<br><span style="color:#1565c0">貸出中:5台</span></div>
+          <div class="mock-area">&#128168; ICU<br><span style="color:#1565c0">貸出中:2台</span></div>
+          <div class="mock-area">&#127973; 4階西病棟<br><span style="color:#999">貸出中:1台</span></div>
+          <div class="mock-area">&#127973; 4階東病棟<br><span style="color:#999">貸出中:0台</span></div>
+          <div class="mock-area">&#128300; 透析室<br><span style="color:#999">貸出中:0台</span></div>
+          <div class="mock-area">&#9881; ME室<br><span style="color:#999">-</span></div>
+        </div>
+        <div style="font-size:8px;font-weight:600;margin-top:5px;color:#555">&#9201; 直近の貸出・返却</div>
+        <div style="font-size:7.5px;color:#666;padding:2px 0;border-bottom:1px solid #eee">
+          <span style="color:#2e7d32">&#9679;</span> &#128230; 貸出 - <strong>CE-IP012</strong> 輸液ポンプ TE-261 &#10132; 3階西病棟 &nbsp; <span style="color:#999">14:30</span>
+        </div>
+        <div style="font-size:7.5px;color:#666;padding:2px 0">
+          <span style="color:#c62828">&#9679;</span> &#8617; 返却 - <strong>CE-SP005</strong> シリンジポンプ TE-SS700 &#10132; ME室 &nbsp; <span style="color:#999">14:15</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 注意事項 -->
+    <div class="section" style="margin-top:6px">
+      <div class="hint-box red">
+        <strong>&#9888; 注意事項</strong><br>
+        &#8226; 貸出中の機器を別エリアへ移す場合は、<strong>先に返却</strong>してから再度貸出してください<br>
+        &#8226; 「廃棄済」「修理中」の機器はシステムが自動で貸出をブロックします<br>
+        &#8226; スキャンが反応しない場合は手入力でIDを入力してください
+      </div>
+      <div class="hint-box blue" style="margin-top:4px">
+        <strong>&#128161; ヒント</strong><br>
+        &#8226; 貸出ボタンで読み取った機器が貸出中の場合、自動的に返却確認画面が表示されます<br>
+        &#8226; 貸出履歴はサイドメニュー「&#128340; 貸出履歴」から確認できます<br>
+        &#8226; データはGoogleスプレッドシートに自動同期されます
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="footer">
+  ME機器管理システム 操作ガイド &#124; ME管理室 &#124; このガイドの更新: 2026年3月 &#124; ブラウザの「印刷」&#10132;「PDFに保存」で PDF化できます
+</div>
+
+</body>
+</html>
