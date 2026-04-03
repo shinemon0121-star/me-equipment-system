@@ -492,6 +492,9 @@ a{color:var(--primary);text-decoration:none}
 
       <!-- 新規点検タブ -->
       <div id="inspTabNew">
+        <!-- 今月の定期点検対象パネル -->
+        <div id="inspMonthlyDuePanel" style="margin-bottom:16px"></div>
+
         <!-- Barcode/ID入力 -->
         <div class="barcode-section">
           <h3>機器ID入力</h3>
@@ -3657,7 +3660,7 @@ function showScreen(name) {
 
   const titles = {
     lending: '貸出・返却', status: '貸出状況', equipment: '機器一覧（使用可能機器）',
-    inspection: '点検登録', repair: '修理記録', 'quick-repair': '修理依頼(簡易)',
+    inspection: '点検登録', 'inspection-schedule': '年間点検予定表', repair: '修理記録', 'quick-repair': '修理依頼(簡易)',
     'repair-dashboard': '修理分析', history: '貸出履歴', dashboard: 'ダッシュボード',
     utilization: '稼働率分析', lifecycle: 'ライフサイクル・アドバイザー',
     'master-equipment': '機器マスター管理', 'master-staff': 'スタッフ管理',
@@ -3690,6 +3693,7 @@ function showScreen(name) {
   else if (name === 'orders') initPromise = initOrders();
   else if (name === 'utilization') initPromise = initUtilization();
   else if (name === 'inspection') initPromise = initInspectionScreen();
+  else if (name === 'inspection-schedule') initPromise = renderInspectionSchedule();
   else if (name === 'quick-repair') initPromise = initQuickRepair();
   else if (name === 'repair-dashboard') initPromise = renderRepairDashboard();
   else if (name === 'lifecycle') initPromise = renderLifecycle();
@@ -4451,6 +4455,347 @@ async function filterHistory() {
   displayHistory(filtered);
 }
 
+// ===================== INSPECTION SCHEDULE (年間点検予定表) =====================
+
+// PDFの点検タイプ定義：INSPECTION_TYPESのキーに対応
+const INSP_SCHEDULE_TYPES = {
+  infusionPump:  { name: '輸液ポンプ',     color: '#3b82f6' },
+  syringePump:   { name: 'シリンジポンプ',   color: '#8b5cf6' },
+  ventilator:    { name: '人工呼吸器',     color: '#ef4444' },
+  anesthesia:    { name: '麻酔器',         color: '#f59e0b' },
+  suction:       { name: '低圧持続吸引器',   color: '#10b981' },
+  defibrillator: { name: '除細動器',       color: '#ec4899' },
+  iabp:          { name: 'IABP',           color: '#6366f1' },
+  tourniquet:    { name: 'タニケット',       color: '#14b8a6' },
+  laserTl:       { name: 'ツリウムレーザー', color: '#f97316' },
+  insufflator:   { name: '気腹装置',       color: '#84cc16' },
+  electrosurgical:{ name: '電気メス',       color: '#d946ef' },
+  ultrasound:    { name: 'エコー',         color: '#0ea5e9' },
+  ecmo:          { name: 'ECMO/PCPS',      color: '#be123c' }
+};
+
+// 機器IDパターンから点検カテゴリを検出
+function detectInspScheduleCategory(eqId) {
+  if (!eqId) return null;
+  const id = eqId.toUpperCase();
+  if (id.startsWith('CE-IP') || id.startsWith('DE-IP')) return 'infusionPump';
+  if (id.startsWith('CE-SP') || id.startsWith('DE-SP')) return 'syringePump';
+  if (id.startsWith('CE-RE') || id.startsWith('DE-RE')) return 'ventilator';
+  if (id.startsWith('CE-AA') || id.startsWith('DE-AA')) return 'anesthesia';
+  if (id.startsWith('CE-SD') || id.startsWith('DE-SD')) return 'suction';
+  if (id.startsWith('CE-DC') || id.startsWith('DE-DC')) return 'defibrillator';
+  if (id.startsWith('CE-IB') || id.startsWith('DE-IB')) return 'iabp';
+  if (id.startsWith('CE-TQ') || id.startsWith('DE-TQ')) return 'tourniquet';
+  if (id.startsWith('CE-TL') || id.startsWith('DE-TL')) return 'laserTl';
+  if (id.startsWith('CE-IF') || id.startsWith('DE-IF')) return 'insufflator';
+  if (id.startsWith('CE-EG') || id.startsWith('DE-EG')) return 'electrosurgical';
+  if (id.startsWith('CE-US') || id.startsWith('DE-US')) return 'ultrasound';
+  if (id.startsWith('CE-EM') || id.startsWith('DE-EM')) return 'ecmo';
+  return null;
+}
+
+// 機器IDから点検間隔（月数）を取得
+function getInspectionInterval(eqId) {
+  if (!eqId) return 4;
+  const id = eqId.toUpperCase();
+  // 3ヶ月: IABP
+  if (id.startsWith('CE-IB') || id.startsWith('DE-IB')) return 3;
+  // 6ヶ月: 人工呼吸器・麻酔器・除細動器・エコー・気腹装置
+  if (id.startsWith('CE-RE') || id.startsWith('DE-RE')) return 6;
+  if (id.startsWith('CE-AA') || id.startsWith('DE-AA')) return 6;
+  if (id.startsWith('CE-DC') || id.startsWith('DE-DC')) return 6;
+  if (id.startsWith('CE-US') || id.startsWith('DE-US')) return 6;
+  if (id.startsWith('CE-IF') || id.startsWith('DE-IF')) return 6;
+  // 12ヶ月: タニケット・ツリウムレーザー
+  if (id.startsWith('CE-TQ') || id.startsWith('DE-TQ')) return 12;
+  if (id.startsWith('CE-TL') || id.startsWith('DE-TL')) return 12;
+  // 4ヶ月: 輸液ポンプ・シリンジポンプ・低圧持続吸引機・電気メス（デフォルト）
+  return 4;
+}
+
+// 初回点検月と間隔（月数）から年間の点検月を算出
+function getInspectionMonths(firstMonth, intervalMonths) {
+  const m = parseInt(firstMonth);
+  if (!m || m < 1 || m > 12) return [];
+  const interval = intervalMonths || 4;
+  if (interval >= 12) return [m]; // 年1回
+  const months = [];
+  for (let i = 0; i < 12; i += interval) {
+    months.push(((m - 1 + i) % 12) + 1);
+  }
+  return months;
+}
+
+// 年間点検予定表をレンダリング
+function renderInspectionSchedule() {
+  // 定期点検対象のみに絞り込む
+  const activeEq = allEquipment.filter(eq => {
+    const st = (eq.status || '').trim();
+    const disc = (eq.discard || '').trim();
+    const asset = (eq.assetType || '').trim();
+    // 廃棄済み・廃棄待ちを除外
+    if (disc === '廃棄' || disc === '廃棄済み' || disc === '廃棄待ち') return false;
+    if (st === '廃棄' || st === '廃棄済み') return false;
+    // レンタル・デモ・代替を除外
+    if (asset === 'レンタル' || asset === 'デモ' || asset === '代替') return false;
+    // DE- から始まる機器IDは定期点検対象外
+    if ((eq.id || '').toUpperCase().startsWith('DE-')) return false;
+    // 点検対象カテゴリのみ
+    const cat = detectInspScheduleCategory(eq.id);
+    return cat !== null;
+  });
+
+  // カテゴリフィルタを構築
+  const filterEl = document.getElementById('inspSchedCategoryFilter');
+  const currentFilter = filterEl.value;
+  const categories = [...new Set(activeEq.map(eq => detectInspScheduleCategory(eq.id)).filter(Boolean))].sort();
+  filterEl.innerHTML = '<option value="">全カテゴリ</option>' +
+    categories.map(c => `<option value="${c}" ${c===currentFilter?'selected':''}>${INSP_SCHEDULE_TYPES[c]?.name||c}</option>`).join('');
+
+  // フィルタ適用
+  const filtered = currentFilter ? activeEq.filter(eq => detectInspScheduleCategory(eq.id) === currentFilter) : activeEq;
+
+  // カテゴリ別にグループ化し、機器IDでソート
+  const grouped = {};
+  filtered.forEach(eq => {
+    const cat = detectInspScheduleCategory(eq.id);
+    if (!grouped[cat]) grouped[cat] = [];
+    grouped[cat].push(eq);
+  });
+  Object.values(grouped).forEach(arr => arr.sort((a, b) => a.id.localeCompare(b.id)));
+
+  // 月表示（4月〜翌3月の年度順）
+  const fyMonths = [4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3];
+  const monthNames = ['', '1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+
+  // 月別負荷カウント（輸液ポンプ＋シリンジポンプ）
+  const pumpLoadByMonth = {};
+  fyMonths.forEach(m => pumpLoadByMonth[m] = 0);
+  const pumpTypes = ['infusionPump', 'syringePump'];
+
+  // テーブル構築
+  let html = `<table class="eq-table" style="font-size:12px;white-space:nowrap">
+    <thead>
+      <tr style="position:sticky;top:0;z-index:2">
+        <th style="min-width:100px;position:sticky;left:0;z-index:3;background:var(--primary)">カテゴリ</th>
+        <th style="min-width:90px;position:sticky;left:100px;z-index:3;background:var(--primary)">機器ID</th>`;
+  fyMonths.forEach(m => {
+    html += `<th style="min-width:60px;text-align:center">${monthNames[m]}</th>`;
+  });
+  html += `</tr></thead><tbody>`;
+
+  const catOrder = ['infusionPump','syringePump','ventilator','anesthesia','suction','defibrillator','iabp','tourniquet','laserTl','insufflator','electrosurgical','ultrasound','ecmo'];
+
+  catOrder.forEach(catKey => {
+    if (!grouped[catKey]) return;
+    const catInfo = INSP_SCHEDULE_TYPES[catKey];
+    const eqs = grouped[catKey];
+
+    eqs.forEach((eq, idx) => {
+      const firstMonth = parseInt(eq.firstInspectionMonth) || 0;
+      const interval = getInspectionInterval(eq.id);
+      const inspMonths = getInspectionMonths(firstMonth, interval);
+      const intervalLabel = interval === 3 ? '3ヶ月' : interval === 6 ? '6ヶ月' : interval === 12 ? '1年' : '4ヶ月';
+
+      html += `<tr>`;
+      // カテゴリ名（グループ先頭のみ表示）
+      if (idx === 0) {
+        html += `<td rowspan="${eqs.length}" style="position:sticky;left:0;z-index:1;background:${catInfo.color}15;font-weight:700;color:${catInfo.color};border-right:2px solid ${catInfo.color};vertical-align:top">${catInfo.name}<div style="font-size:10px;font-weight:400;opacity:.7">${intervalLabel}毎</div></td>`;
+      }
+      // 機器ID
+      html += `<td style="position:sticky;left:100px;z-index:1;background:#fff;font-weight:600;font-size:11px">${eq.id}</td>`;
+
+      // 各月のセル
+      fyMonths.forEach(m => {
+        const isInsp = inspMonths.includes(m);
+        if (isInsp) {
+          // 負荷カウント（ポンプ系）
+          if (pumpTypes.includes(catKey)) {
+            pumpLoadByMonth[m]++;
+          }
+          html += `<td style="text-align:center;background:${catInfo.color}20;border:1px solid ${catInfo.color}40"><span style="display:inline-block;width:18px;height:18px;line-height:18px;border-radius:50%;background:${catInfo.color};color:#fff;font-size:10px;font-weight:700">${eq.id.split('-').pop()}</span></td>`;
+        } else {
+          html += `<td style="text-align:center;color:var(--gray-300)">-</td>`;
+        }
+      });
+
+      html += `</tr>`;
+    });
+  });
+
+  html += `</tbody></table>`;
+
+  // 未設定の機器があるか確認
+  const unsetEqs = filtered.filter(eq => !parseInt(eq.firstInspectionMonth));
+  if (unsetEqs.length > 0) {
+    html = `<div class="card" style="margin-bottom:12px;border-left:4px solid var(--warning);background:#fffbeb;padding:12px 16px">
+      <strong style="color:var(--warning)">&#9888; 初回点検月が未設定の機器が ${unsetEqs.length} 台あります</strong>
+      <div style="margin-top:6px;font-size:12px;color:var(--gray-600)">
+        機器マスター管理から「初回点検月」を設定してください:
+        ${unsetEqs.slice(0, 20).map(eq => `<span style="background:var(--gray-100);padding:1px 6px;border-radius:4px;margin:2px">${eq.id}</span>`).join(' ')}
+        ${unsetEqs.length > 20 ? `<span style="color:var(--gray-400)">... 他${unsetEqs.length - 20}台</span>` : ''}
+      </div>
+    </div>` + html;
+  }
+
+  document.getElementById('inspSchedTable').innerHTML = html;
+
+  // ===== 負荷平準化チェック（輸液ポンプ＋シリンジポンプ） =====
+  const pumpMonthCounts = fyMonths.map(m => pumpLoadByMonth[m]);
+  const totalPumpInsp = pumpMonthCounts.reduce((s, c) => s + c, 0);
+
+  if (totalPumpInsp === 0) {
+    document.getElementById('inspSchedLoadCheck').innerHTML = '';
+    return;
+  }
+
+  const avgLoad = totalPumpInsp / 12;
+  const maxLoad = Math.max(...pumpMonthCounts);
+  const minLoad = Math.min(...pumpMonthCounts);
+  const maxMonth = fyMonths[pumpMonthCounts.indexOf(maxLoad)];
+  const minMonth = fyMonths[pumpMonthCounts.indexOf(minLoad)];
+
+  // 偏り判定：最大が平均の1.5倍以上、かつ最大と最小の差が5以上
+  const isUnbalanced = maxLoad > avgLoad * 1.5 && (maxLoad - minLoad) >= 5;
+
+  let loadHtml = `<div class="card" style="padding:16px">
+    <h4 style="margin:0 0 12px 0;font-size:14px">&#9878; 輸液・シリンジポンプ 月別点検負荷</h4>
+    <div style="display:flex;gap:4px;align-items:end;height:80px;margin-bottom:8px">`;
+
+  fyMonths.forEach((m, i) => {
+    const count = pumpMonthCounts[i];
+    const pct = maxLoad > 0 ? (count / maxLoad) * 100 : 0;
+    const isMax = count === maxLoad && isUnbalanced;
+    const barColor = isMax ? 'var(--danger)' : count > avgLoad ? 'var(--warning)' : 'var(--primary)';
+    loadHtml += `<div style="flex:1;display:flex;flex-direction:column;align-items:center">
+      <div style="font-size:10px;font-weight:700;color:${isMax?'var(--danger)':'var(--gray-600)'}">${count}</div>
+      <div style="width:100%;height:${pct}%;min-height:2px;background:${barColor};border-radius:3px 3px 0 0;transition:height 0.3s"></div>
+    </div>`;
+  });
+
+  loadHtml += `</div>
+    <div style="display:flex;gap:4px;font-size:10px;color:var(--gray-500)">`;
+  fyMonths.forEach(m => {
+    loadHtml += `<div style="flex:1;text-align:center">${monthNames[m]}</div>`;
+  });
+  loadHtml += `</div>
+    <div style="margin-top:8px;font-size:12px;color:var(--gray-600)">
+      平均: <strong>${avgLoad.toFixed(1)}</strong>台/月 ｜
+      最多: <strong>${monthNames[maxMonth]} (${maxLoad}台)</strong> ｜
+      最少: <strong>${monthNames[minMonth]} (${minLoad}台)</strong>
+    </div>`;
+
+  if (isUnbalanced) {
+    // 偏りがある場合の提案
+    const overloadedMonths = fyMonths.filter((m, i) => pumpMonthCounts[i] > avgLoad * 1.3);
+    const underloadedMonths = fyMonths.filter((m, i) => pumpMonthCounts[i] < avgLoad * 0.7);
+
+    // 過負荷月の機器を抽出して提案
+    const suggestions = [];
+    const pumpEqs = filtered.filter(eq => pumpTypes.includes(detectInspScheduleCategory(eq.id)));
+
+    overloadedMonths.forEach(overMonth => {
+      const eqsInMonth = pumpEqs.filter(eq => {
+        const interval = getInspectionInterval(eq.id);
+        const months = getInspectionMonths(parseInt(eq.firstInspectionMonth) || 0, interval);
+        return months.includes(overMonth);
+      });
+      if (eqsInMonth.length > 0 && underloadedMonths.length > 0) {
+        // 末尾数台を提案
+        const moveCount = Math.min(Math.ceil((eqsInMonth.length - avgLoad) / 3), 3);
+        const candidates = eqsInMonth.slice(-moveCount);
+        candidates.forEach(eq => {
+          const bestTarget = underloadedMonths.reduce((best, m) => {
+            const idx = fyMonths.indexOf(m);
+            return pumpMonthCounts[idx] < pumpMonthCounts[fyMonths.indexOf(best)] ? m : best;
+          }, underloadedMonths[0]);
+          suggestions.push({
+            eqId: eq.id,
+            from: overMonth,
+            to: bestTarget,
+            currentFirst: parseInt(eq.firstInspectionMonth) || 0
+          });
+        });
+      }
+    });
+
+    loadHtml += `<div style="margin-top:12px;padding:10px 14px;background:#fef2f2;border-radius:8px;border-left:4px solid var(--danger)">
+      <strong style="color:var(--danger)">&#9888; 負荷の偏りを検出</strong>
+      <div style="margin-top:6px;font-size:12px">
+        ${monthNames[maxMonth]}に点検が集中しています（${maxLoad}台 / 平均${avgLoad.toFixed(0)}台）。以下の初回点検月の調整を提案します:
+      </div>`;
+    if (suggestions.length > 0) {
+      loadHtml += `<table style="width:100%;margin-top:8px;font-size:12px;border-collapse:collapse">
+        <thead><tr style="background:var(--gray-100)">
+          <th style="padding:4px 8px;text-align:left">機器ID</th>
+          <th style="padding:4px 8px">現在の初回月</th>
+          <th style="padding:4px 8px">提案先の月</th>
+          <th style="padding:4px 8px">点検月</th>
+        </tr></thead><tbody>`;
+      suggestions.forEach(s => {
+        const interval = getInspectionInterval(s.eqId);
+        const newMonths = getInspectionMonths(s.to, interval);
+        loadHtml += `<tr>
+          <td style="padding:4px 8px;font-weight:600">${s.eqId}</td>
+          <td style="padding:4px 8px;text-align:center">${s.currentFirst}月</td>
+          <td style="padding:4px 8px;text-align:center;color:var(--primary);font-weight:700">${s.to}月</td>
+          <td style="padding:4px 8px;text-align:center;font-size:11px">${newMonths.map(m => monthNames[m]).join(' → ')}</td>
+        </tr>`;
+      });
+      loadHtml += `</tbody></table>`;
+    }
+    loadHtml += `</div>`;
+  } else if (totalPumpInsp > 0) {
+    loadHtml += `<div style="margin-top:8px;padding:8px 12px;background:#ecfdf5;border-radius:8px;font-size:12px;color:#059669">
+      &#9989; 負荷は比較的均等に分散されています
+    </div>`;
+  }
+
+  loadHtml += `</div>`;
+  document.getElementById('inspSchedLoadCheck').innerHTML = loadHtml;
+}
+
+// CSV出力
+function exportInspScheduleCSV() {
+  const fyMonths = [4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3];
+  const monthNames = ['', '1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+
+  const activeEq = allEquipment.filter(eq => {
+    const disc = (eq.discard || '').trim();
+    if (disc === '廃棄' || disc === '廃棄済み' || disc === '廃棄待ち') return false;
+    const st = (eq.status || '').trim();
+    if (st === '廃棄' || st === '廃棄済み') return false;
+    const asset = (eq.assetType || '').trim();
+    if (asset === 'レンタル' || asset === 'デモ' || asset === '代替') return false;
+    if ((eq.id || '').toUpperCase().startsWith('DE-')) return false;
+    return detectInspScheduleCategory(eq.id) !== null;
+  });
+
+  const intervalLabel = i => i === 3 ? '3ヶ月毎' : i === 6 ? '6ヶ月毎' : i === 12 ? '1年毎' : '4ヶ月毎';
+  let csv = '\uFEFF"カテゴリ","機器ID","点検間隔",' + fyMonths.map(m => `"${monthNames[m]}"`).join(',') + '\n';
+
+  activeEq.sort((a, b) => {
+    const ca = detectInspScheduleCategory(a.id) || '';
+    const cb = detectInspScheduleCategory(b.id) || '';
+    if (ca !== cb) return ca.localeCompare(cb);
+    return a.id.localeCompare(b.id);
+  });
+
+  activeEq.forEach(eq => {
+    const cat = detectInspScheduleCategory(eq.id);
+    const catName = INSP_SCHEDULE_TYPES[cat]?.name || cat;
+    const interval = getInspectionInterval(eq.id);
+    const inspMonths = getInspectionMonths(parseInt(eq.firstInspectionMonth) || 0, interval);
+    csv += `"${catName}","${eq.id}","${intervalLabel(interval)}",` + fyMonths.map(m => inspMonths.includes(m) ? '"○"' : '""').join(',') + '\n';
+  });
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `年間点検予定表_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+}
+
 // ===================== INSPECTION =====================
 const INSPECTION_TYPES = {
   infusionPump: {
@@ -4761,18 +5106,131 @@ function switchInspTab(tab) {
 }
 
 function initInspectionScreen() {
+  renderMonthlyDuePanel();
   renderInspTypeGrid();
   populateInspHistTypeFilter();
 }
 
+// 今月の定期点検対象機器を計算して返す
+function getMonthlyDueEquipment() {
+  const thisMonth = new Date().getMonth() + 1; // 1-12
+  return allEquipment.filter(eq => {
+    // 除外条件（年間点検予定表と同じロジック）
+    const disc = (eq.discard || '').trim();
+    if (disc === '廃棄' || disc === '廃棄済み' || disc === '廃棄待ち') return false;
+    const st = (eq.status || '').trim();
+    if (st === '廃棄' || st === '廃棄済み') return false;
+    const asset = (eq.assetType || '').trim();
+    if (asset === 'レンタル' || asset === 'デモ' || asset === '代替') return false;
+    if ((eq.id || '').toUpperCase().startsWith('DE-')) return false;
+    // 初回点検月が未設定の場合はスキップ
+    if (!eq.firstInspectionMonth) return false;
+    // 今月が点検月かチェック
+    const interval = getInspectionInterval(eq.id);
+    const months = getInspectionMonths(parseInt(eq.firstInspectionMonth), interval);
+    return months.includes(thisMonth);
+  });
+}
+
+// 今月の定期点検対象パネルをレンダリング
+function renderMonthlyDuePanel() {
+  const panel = document.getElementById('inspMonthlyDuePanel');
+  if (!panel) return;
+
+  const dueEqs = getMonthlyDueEquipment();
+  const thisMonth = new Date().getMonth() + 1;
+  const monthName = thisMonth + '月';
+
+  if (dueEqs.length === 0) {
+    panel.innerHTML = `
+      <div style="padding:10px 14px;background:#f0fdf4;border-radius:10px;border-left:4px solid #22c55e;font-size:13px;color:#16a34a;display:flex;align-items:center;gap:8px">
+        <span style="font-size:18px">&#9989;</span>
+        <span><strong>${monthName}の定期点検対象機器はありません</strong>（初回点検月未設定の機器を除く）</span>
+      </div>`;
+    return;
+  }
+
+  // カテゴリ別にグループ化
+  const grouped = {};
+  dueEqs.forEach(eq => {
+    const catKey = detectInspScheduleCategory(eq.id);
+    const catName = catKey ? (INSP_SCHEDULE_TYPES[catKey]?.name || catKey) : 'その他';
+    if (!grouped[catName]) grouped[catName] = [];
+    grouped[catName].push(eq);
+  });
+
+  // 展開・折りたたみ状態をlocalStorageで保持
+  const isOpen = localStorage.getItem('inspMonthlyPanelOpen') !== 'false';
+
+  let html = `
+    <div style="border:2px solid #f59e0b;border-radius:10px;overflow:hidden">
+      <div style="background:#fffbeb;padding:10px 14px;display:flex;justify-content:space-between;align-items:center;cursor:pointer"
+           onclick="toggleMonthlyDuePanel()">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:20px">&#128197;</span>
+          <span style="font-weight:700;color:#92400e;font-size:14px">
+            ${monthName}の定期点検対象
+          </span>
+          <span style="background:#f59e0b;color:#fff;font-weight:700;font-size:13px;padding:2px 10px;border-radius:20px">${dueEqs.length}台</span>
+        </div>
+        <span id="inspMonthlyToggleIcon" style="font-size:18px;color:#92400e">${isOpen ? '&#9660;' : '&#9654;'}</span>
+      </div>
+      <div id="inspMonthlyDueBody" style="display:${isOpen ? '' : 'none'};padding:12px 14px;background:#fff">`;
+
+  Object.entries(grouped).forEach(([catName, eqs]) => {
+    html += `<div style="margin-bottom:10px">
+      <div style="font-size:12px;font-weight:700;color:var(--gray-500);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">${catName} (${eqs.length}台)</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">`;
+    eqs.sort((a, b) => a.id.localeCompare(b.id)).forEach(eq => {
+      html += `<div onclick="document.getElementById('inspEqId').value='${eq.id}';lookupInspEquipment();"
+                    title="${eq.name || ''}"
+                    style="display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border:2px solid #f59e0b;border-radius:8px;cursor:pointer;background:#fffbeb;font-size:12px;font-weight:600;color:#92400e;transition:background .15s"
+                    onmouseover="this.style.background='#fef3c7'" onmouseout="this.style.background='#fffbeb'">
+                <span style="color:#f59e0b">&#9711;</span> ${eq.id}
+              </div>`;
+    });
+    html += `</div></div>`;
+  });
+
+  html += `      </div>
+    </div>`;
+
+  panel.innerHTML = html;
+}
+
+function toggleMonthlyDuePanel() {
+  const body = document.getElementById('inspMonthlyDueBody');
+  const icon = document.getElementById('inspMonthlyToggleIcon');
+  const isOpen = body.style.display !== 'none';
+  body.style.display = isOpen ? 'none' : '';
+  icon.innerHTML = isOpen ? '&#9654;' : '&#9660;';
+  localStorage.setItem('inspMonthlyPanelOpen', String(!isOpen));
+}
+
 function renderInspTypeGrid() {
+  const thisMonth = new Date().getMonth() + 1;
+  const dueEqs = getMonthlyDueEquipment();
+
+  // タイプ別の当月対象台数を集計
+  const dueCountByType = {};
+  dueEqs.forEach(eq => {
+    const typeKey = detectInspType(eq.id);
+    if (typeKey) dueCountByType[typeKey] = (dueCountByType[typeKey] || 0) + 1;
+  });
+
   const grid = document.getElementById('inspTypeGrid');
-  grid.innerHTML = Object.entries(INSPECTION_TYPES).map(([key, t]) =>
-    `<div class="insp-type-card" onclick="selectInspType('${key}')">
+  grid.innerHTML = Object.entries(INSPECTION_TYPES).map(([key, t]) => {
+    const count = dueCountByType[key] || 0;
+    const badge = count > 0
+      ? `<div style="position:absolute;top:4px;right:4px;background:#ef4444;color:#fff;font-size:10px;font-weight:700;min-width:18px;height:18px;line-height:18px;text-align:center;border-radius:9px;padding:0 4px">${count}</div>`
+      : '';
+    const highlight = count > 0 ? 'border:2px solid #f59e0b;background:#fffbeb;' : '';
+    return `<div class="insp-type-card" onclick="selectInspType('${key}')" style="position:relative;${highlight}">
+      ${badge}
       <div class="insp-icon">${t.icon}</div>
       <div class="insp-name">${t.name}</div>
-    </div>`
-  ).join('');
+    </div>`;
+  }).join('');
 }
 
 function populateInspHistTypeFilter() {
@@ -4883,15 +5341,19 @@ function selectInspType(typeKey) {
   const panel = document.getElementById('inspEqListPanel');
   const body = document.getElementById('inspEqListBody');
   document.getElementById('inspEqListTitle').textContent = config.name + ' 機器一覧 (' + matching.length + '台)';
-  body.innerHTML = matching.map(e =>
-    `<div class="insp-eq-item" onclick="pickInspEquipment('${e.id}','${typeKey}')">
+  const thisMonth = new Date().getMonth() + 1;
+  const dueIds = new Set(getMonthlyDueEquipment().map(e => e.id));
+  body.innerHTML = matching.map(e => {
+    const isDue = dueIds.has(e.id);
+    return `<div class="insp-eq-item" onclick="pickInspEquipment('${e.id}','${typeKey}')"
+              style="${isDue ? 'border-left:4px solid #f59e0b;background:#fffbeb;' : ''}">
       <div class="eq-info">
-        <div class="eq-id">${e.id}</div>
+        <div class="eq-id">${e.id}${isDue ? ' <span style="font-size:10px;background:#f59e0b;color:#fff;padding:1px 6px;border-radius:10px;font-weight:700;vertical-align:middle">今月</span>' : ''}</div>
         <div class="eq-name">${e.name} ${e.model||''}</div>
       </div>
       <span style="color:var(--gray-400);font-size:18px">&#8250;</span>
-    </div>`
-  ).join('');
+    </div>`;
+  }).join('');
   panel.style.display = '';
   document.getElementById('inspFormPanel').style.display = 'none';
 }
@@ -7761,6 +8223,29 @@ function showEquipmentEditModal(eqId) {
         <span id="editEqRatioValue" style="font-size:16px;font-weight:700">${(() => { const r = eq ? calcMaintenanceRatio(eq) : null; return r !== null ? maintenanceRatioBadge(r) : '<span style="color:var(--gray-400)">-</span>'; })()}</span>
       </div>
 
+      <!-- 点検設定 -->
+      <div style="grid-column:1/-1;font-size:13px;font-weight:700;color:var(--primary);border-bottom:2px solid var(--primary-light);padding-bottom:4px;margin-top:8px;margin-bottom:2px">点検設定</div>
+      <div class="form-group">
+        <label class="form-label">初回点検月</label>
+        <select class="form-select" id="editEqFirstInspMonth">
+          <option value="" ${!eq||!eq.firstInspectionMonth?'selected':''}>未設定</option>
+          ${[1,2,3,4,5,6,7,8,9,10,11,12].map(m => `<option value="${m}" ${eq&&String(eq.firstInspectionMonth)===String(m)?'selected':''}>${m}月</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group" style="grid-column:span 2;display:flex;align-items:center;gap:8px">
+        <label class="form-label" style="margin-bottom:0">点検月プレビュー</label>
+        <span id="editEqInspMonthPreview" style="font-size:13px;font-weight:600;color:var(--primary)">
+          ${(() => {
+            const m = parseInt(eq?.firstInspectionMonth);
+            if (!m) return '<span style="color:var(--gray-400)">初回点検月を設定してください</span>';
+            const interval = eq?.id ? getInspectionInterval(eq.id) : 4;
+            const intervalLabel = interval === 3 ? '3ヶ月毎' : interval === 6 ? '6ヶ月毎' : interval === 12 ? '1年毎' : '4ヶ月毎';
+            const months = getInspectionMonths(m, interval);
+            return months.map(mm => mm + '月').join(' → ') + ` <span style="font-size:11px;color:var(--gray-500)">(${intervalLabel})</span>`;
+          })()}
+        </span>
+      </div>
+
       <!-- ステータス・廃棄 -->
       <div style="grid-column:1/-1;font-size:13px;font-weight:700;color:var(--primary);border-bottom:2px solid var(--primary-light);padding-bottom:4px;margin-top:8px;margin-bottom:2px">ステータス</div>
       <div class="form-group">
@@ -7798,6 +8283,18 @@ function showEquipmentEditModal(eqId) {
   // Toggle new category input
   document.getElementById('editEqCategory').addEventListener('change', function() {
     document.getElementById('editEqCategoryNew').style.display = this.value === '__new__' ? 'block' : 'none';
+  });
+
+  // 初回点検月プレビュー更新
+  document.getElementById('editEqFirstInspMonth').addEventListener('change', function() {
+    const m = parseInt(this.value);
+    const preview = document.getElementById('editEqInspMonthPreview');
+    if (!m) { preview.innerHTML = '<span style="color:var(--gray-400)">初回点検月を設定してください</span>'; return; }
+    const eqIdForInterval = document.getElementById('editEqId').value.trim();
+    const interval = eqIdForInterval ? getInspectionInterval(eqIdForInterval) : 4;
+    const intervalLabel = interval === 3 ? '3ヶ月毎' : interval === 6 ? '6ヶ月毎' : interval === 12 ? '1年毎' : '4ヶ月毎';
+    const months = getInspectionMonths(m, interval);
+    preview.innerHTML = months.map(mm => mm + '月').join(' → ') + ` <span style="font-size:11px;color:var(--gray-500)">(${intervalLabel})</span>`;
   });
 
   document.getElementById('modalFooter').innerHTML = `
@@ -7858,6 +8355,7 @@ async function saveEquipment(isNew) {
     annualMaintenanceCost: document.getElementById('editEqAnnualMaintCost').value.trim(),
     maintenanceStartDate: document.getElementById('editEqMaintStart').value,
     maintenanceEndDate: document.getElementById('editEqMaintEnd').value,
+    firstInspectionMonth: document.getElementById('editEqFirstInspMonth').value,
     discardDate: document.getElementById('editEqDiscardDate').value,
     discardReason: document.getElementById('editEqDiscardReason').value.trim(),
     documentUrl: document.getElementById('editEqDocUrl').value.trim(),
