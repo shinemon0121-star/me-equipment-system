@@ -293,8 +293,17 @@ a{color:var(--primary);text-decoration:none}
     <div class="nav-item" data-screen="inspection" onclick="showScreen('inspection')">
       <span class="icon">&#9989;</span>点検登録
     </div>
+    <div class="nav-item" data-screen="inspection-schedule" onclick="showScreen('inspection-schedule')">
+      <span class="icon">&#128197;</span>年間点検予定表
+    </div>
     <div class="nav-item" data-screen="repair" onclick="showScreen('repair')">
       <span class="icon">&#128736;</span>修理記録
+    </div>
+    <div class="nav-item" data-screen="quick-repair" onclick="showScreen('quick-repair')">
+      <span class="icon">&#128225;</span>修理依頼(簡易)
+    </div>
+    <div class="nav-item" data-screen="repair-dashboard" onclick="showScreen('repair-dashboard')">
+      <span class="icon">&#128200;</span>修理分析
     </div>
     <div class="nav-item" data-screen="history" onclick="showScreen('history')">
       <span class="icon">&#128337;</span>貸出履歴
@@ -305,6 +314,9 @@ a{color:var(--primary);text-decoration:none}
     </div>
     <div class="nav-item" data-screen="utilization" onclick="showScreen('utilization')">
       <span class="icon">&#128200;</span>稼働率分析
+    </div>
+    <div class="nav-item" data-screen="lifecycle" onclick="showScreen('lifecycle')">
+      <span class="icon">&#9851;</span>ライフサイクル
     </div>
     <div class="nav-section">設定管理</div>
     <div class="nav-item" data-screen="master-equipment" onclick="showScreen('master-equipment')">
@@ -535,6 +547,23 @@ a{color:var(--primary);text-decoration:none}
       </div>
     </div>
 
+    <!-- ========== 年間点検予定表画面 ========== -->
+    <div class="screen" id="screen-inspection-schedule">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+        <h3 style="margin:0">年間点検予定表</h3>
+        <div style="display:flex;gap:8px;align-items:center">
+          <select class="filter-select" id="inspSchedCategoryFilter" onchange="renderInspectionSchedule()">
+            <option value="">全カテゴリ</option>
+          </select>
+          <button class="btn btn-outline" onclick="exportInspScheduleCSV()">&#128196; CSV出力</button>
+        </div>
+      </div>
+      <!-- 負荷平準化チェック結果 -->
+      <div id="inspSchedLoadCheck" style="margin-bottom:16px"></div>
+      <!-- スケジュール表本体 -->
+      <div id="inspSchedTable" style="overflow-x:auto"></div>
+    </div>
+
     <!-- ========== 修理記録画面 ========== -->
     <div class="screen" id="screen-repair">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
@@ -604,6 +633,160 @@ a{color:var(--primary);text-decoration:none}
       </div>
     </div>
 
+    <!-- ========== 修理依頼(簡易)画面 ========== -->
+    <div class="screen" id="screen-quick-repair">
+      <div class="barcode-section" style="background:linear-gradient(135deg,#dc2626,#991b1b)">
+        <h3>&#128225; 修理依頼・報告（スマホ対応）</h3>
+        <div class="barcode-input-wrap">
+          <input type="text" class="barcode-input" id="qrepBarcodeInput" placeholder="機器IDを入力 or QRスキャン..." autocomplete="off">
+          <button class="btn btn-lg" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3)" onclick="startQrScan('quickRepair')" title="QRスキャン">&#128247;</button>
+        </div>
+        <div class="barcode-status" id="qrepBarcodeStatus"></div>
+      </div>
+      <div id="qrepFormArea" style="display:none">
+        <div class="card" style="margin-bottom:16px">
+          <div class="card-header" style="background:var(--gray-50)">
+            <h3 id="qrepEqTitle">機器情報</h3>
+            <span id="qrepEqBadge"></span>
+          </div>
+          <div class="card-body" id="qrepEqInfo"></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><h3>&#128221; 報告内容</h3></div>
+          <div class="card-body">
+            <div class="form-group">
+              <label class="form-label">故障区分 <span style="color:var(--danger)">*</span></label>
+              <div style="display:flex;gap:8px;flex-wrap:wrap" id="qrepFailureType">
+                <label class="btn btn-outline btn-sm" style="cursor:pointer"><input type="radio" name="qrepFType" value="突発故障" style="display:none" onchange="this.parentElement.classList.add('btn-danger');this.parentElement.style.color='#fff'"> &#9888; 突発故障</label>
+                <label class="btn btn-outline btn-sm" style="cursor:pointer"><input type="radio" name="qrepFType" value="経年劣化" style="display:none" onchange="this.parentElement.classList.add('btn-warning');this.parentElement.style.color='#fff'"> &#128337; 経年劣化</label>
+                <label class="btn btn-outline btn-sm" style="cursor:pointer"><input type="radio" name="qrepFType" value="操作ミス" style="display:none" onchange="this.parentElement.classList.add('btn-primary');this.parentElement.style.color='#fff'"> &#128100; 操作ミス</label>
+                <label class="btn btn-outline btn-sm" style="cursor:pointer"><input type="radio" name="qrepFType" value="定期交換" style="display:none" onchange="this.parentElement.classList.add('btn-success');this.parentElement.style.color='#fff'"> &#128260; 定期交換</label>
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">臨床的重要度 <span style="color:var(--danger)">*</span></label>
+              <select class="form-select" id="qrepClinicalImportance" style="font-size:16px;padding:12px">
+                <option value="">選択...</option>
+                <option value="5">5 - 生命維持（人工呼吸器・ECMO等）</option>
+                <option value="4">4 - 手術・治療必須（麻酔器・電気メス等）</option>
+                <option value="3">3 - 診断必須（CT・MRI・超音波等）</option>
+                <option value="2">2 - 一般診療（モニター・ポンプ等）</option>
+                <option value="1">1 - 補助的（体温計・記録機器等）</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">不具合内容 <span style="color:var(--danger)">*</span></label>
+              <textarea class="form-textarea" id="qrepDescription" rows="3" placeholder="どのような不具合が発生しましたか？" style="font-size:16px"></textarea>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+              <div class="form-group">
+                <label class="form-label">概算費用 (円) <span style="color:var(--danger)">*</span></label>
+                <input type="text" class="form-input" id="qrepEstCost" placeholder="例: 50000" style="font-size:16px" inputmode="numeric">
+              </div>
+              <div class="form-group">
+                <label class="form-label">ダウンタイム (時間) <span style="color:var(--danger)">*</span></label>
+                <input type="text" class="form-input" id="qrepDowntime" placeholder="例: 24" style="font-size:16px" inputmode="numeric">
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+              <div class="form-group">
+                <label class="form-label">依頼部署</label>
+                <select class="form-select" id="qrepDept" style="font-size:16px;padding:12px"></select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">報告者</label>
+                <select class="form-select" id="qrepStaff" style="font-size:16px;padding:12px"></select>
+              </div>
+            </div>
+            <button class="btn btn-danger btn-lg" style="width:100%;font-size:18px;padding:16px" onclick="submitQuickRepair()">&#128225; 修理依頼を送信</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== 修理分析ダッシュボード画面 ========== -->
+    <div class="screen" id="screen-repair-dashboard">
+      <div class="stats-grid" id="repDashStats"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:16px">
+        <div class="card">
+          <div class="card-header"><h3>&#127970; 部門別 年間累計修理費</h3></div>
+          <div class="card-body" id="repDashDeptCost" style="overflow-x:auto"></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><h3>&#9888; 部門別 突発故障率</h3></div>
+          <div class="card-body" id="repDashFailureRate"></div>
+        </div>
+      </div>
+      <div class="card" style="margin-top:20px">
+        <div class="card-header"><h3>&#128200; 月別修理費推移</h3></div>
+        <div class="card-body" id="repDashMonthly" style="overflow-x:auto"></div>
+      </div>
+      <div class="card" style="margin-top:20px">
+        <div class="card-header">
+          <h3>&#128293; 故障多発機器 TOP10</h3>
+        </div>
+        <div class="card-body" id="repDashTopFailures" style="overflow-x:auto"></div>
+      </div>
+    </div>
+
+    <!-- ========== ライフサイクル・アドバイザー画面 ========== -->
+    <div class="screen" id="screen-lifecycle">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+        <h3>&#9851; ライフサイクル・アドバイザー</h3>
+        <div style="display:flex;gap:8px">
+          <select class="filter-select" id="lcDeptFilter" onchange="renderLifecycle()">
+            <option value="">全部門</option>
+            <option value="ME">ME</option>
+            <option value="放射線">放射線</option>
+            <option value="検査">検査</option>
+            <option value="リハビリ">リハビリ</option>
+            <option value="共用">共用</option>
+          </select>
+          <button class="btn btn-primary" onclick="exportLifecycleCSV()">&#128229; レポート出力</button>
+          <button class="btn btn-outline" onclick="checkMaintenanceNotifications()">&#128276; 通知チェック</button>
+        </div>
+      </div>
+      <!-- 通知設定 -->
+      <div id="lcNotifySettings" style="display:none;margin-bottom:16px">
+        <div class="card">
+          <div class="card-header"><h3>&#128276; 通知設定</h3></div>
+          <div class="card-body">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+              <div class="form-group">
+                <label class="form-label">Slack Webhook URL</label>
+                <input type="url" class="form-input" id="lcSlackWebhook" placeholder="https://hooks.slack.com/services/..." value="">
+              </div>
+              <div class="form-group">
+                <label class="form-label">通知先メールアドレス</label>
+                <input type="email" class="form-input" id="lcNotifyEmail" placeholder="ce-team@hospital.jp" value="">
+              </div>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="saveNotifySettings()">保存</button>
+          </div>
+        </div>
+      </div>
+      <!-- サマリー -->
+      <div class="stats-grid" id="lcSummary"></div>
+      <!-- 更新予算概算 -->
+      <div class="card" style="margin-top:16px">
+        <div class="card-header"><h3>&#128176; 翌年度 更新予算概算（部門別）</h3></div>
+        <div class="card-body" id="lcBudgetTable" style="overflow-x:auto"></div>
+      </div>
+      <!-- 更新優先順位 -->
+      <div class="card" style="margin-top:16px">
+        <div class="card-header">
+          <h3>&#127942; 更新優先順位（3軸スコアリング）</h3>
+          <span style="font-size:11px;color:var(--gray-400)">故障頻度 + 保守コスト + 臨床的重要度</span>
+        </div>
+        <div class="card-body" id="lcPriorityTable" style="overflow-x:auto"></div>
+      </div>
+      <!-- 保守契約期限アラート -->
+      <div class="card" style="margin-top:16px">
+        <div class="card-header"><h3>&#9888; 保守契約更新アラート（3ヶ月以内）</h3></div>
+        <div class="card-body" id="lcMaintenanceAlerts" style="overflow-x:auto"></div>
+      </div>
+    </div>
+
     <!-- ========== 稼働率分析画面 ========== -->
     <div class="screen" id="screen-utilization">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">
@@ -665,6 +848,15 @@ a{color:var(--primary);text-decoration:none}
           <select class="filter-select" id="meqCatFilter" onchange="filterMasterEquipment()">
             <option value="">全カテゴリ</option>
           </select>
+          <select class="filter-select" id="meqDeptFilter" onchange="filterMasterEquipment()">
+            <option value="">全部門</option>
+            <option value="ME">ME</option>
+            <option value="放射線">放射線</option>
+            <option value="検査">検査</option>
+            <option value="リハビリ">リハビリ</option>
+            <option value="共用">共用</option>
+            <option value="__unset__">未設定</option>
+          </select>
           <span id="meqViewLabel" style="font-size:12px;color:var(--gray-400);white-space:nowrap"></span>
         </div>
         <div style="display:flex;gap:8px">
@@ -678,8 +870,8 @@ a{color:var(--primary);text-decoration:none}
             <thead>
               <tr>
                 <th>機器ID</th><th>機器区分</th><th>機器名</th><th>型式</th><th>製造番号</th>
-                <th>管理部署</th><th>製造元</th><th>代理店</th><th>保管場所</th><th>ステータス</th>
-                <th>資産</th><th>CH</th><th>納入日</th><th>操作</th>
+                <th>管理部署</th><th>管理部門</th><th>製造元</th><th>代理店</th><th>保管場所</th><th>ステータス</th>
+                <th>資産</th><th>CH</th><th>納入日</th><th>保守形態</th><th>維持費率</th><th>操作</th>
               </tr>
             </thead>
             <tbody id="meqTableBody"></tbody>
@@ -1639,6 +1831,7 @@ const SPREADSHEET_ID = '1hORasvyl7H0KcVy33AhUfISv3-1HXatxduBXHuijspM';
 
 const SHEET_NAMES = {
   equipment: '機器マスター',
+  extendedSpecs: 'extended_specs',
   lending: '貸出履歴',
   inspection: '点検記録',
   repair: '修理記録',
@@ -1729,6 +1922,9 @@ function getEquipmentFieldMap() {
     '代替レンタルデモ開始日': 'rentalStartDate', '代替レンタルデモ終了日': 'rentalEndDate',
     '保守契約': 'maintenanceContract', '廃棄日': 'discardDate', '廃棄理由': 'discardReason',
     '添付文書URL': 'documentUrl', '備考': 'notes',
+    '管理部門': 'managedByDept', '保守契約形態': 'maintenanceType',
+    '年間保守費': 'annualMaintenanceCost', '保守契約開始日': 'maintenanceStartDate', '保守契約終了日': 'maintenanceEndDate',
+    '初回点検月': 'firstInspectionMonth',
   };
 }
 
@@ -1759,6 +1955,7 @@ function doGet(e) {
       case 'getItems': result = handleGetItems(); break;
       case 'getOrders': result = handleGetOrders(); break;
       case 'getInventoryLog': result = handleGetInventoryLog(); break;
+      case 'getExtendedSpecs': result = handleGetExtendedSpecs(); break;
       case 'getAllTypedInspections': result = handleGetAllTypedInspections(); break;
       case 'listSheets': result = handleListSheets(); break;
       default: result = { success: false, error: 'Unknown action: ' + action };
@@ -1795,6 +1992,8 @@ function doPost(e) {
       case 'saveOrder': result = handleSaveOrder(body.data); break;
       case 'deleteOrder': result = handleDeleteOrder(body.id); break;
       case 'addInventoryLog': result = handleAddInventoryLog(body.data); break;
+      case 'saveExtendedSpec': result = handleSaveExtendedSpec(body.data); break;
+      case 'deleteExtendedSpec': result = handleDeleteExtendedSpec(body.id); break;
       case 'syncAll': result = handleSyncAll(body.data); break;
       case 'updateEquipmentField': result = handleUpdateEquipmentField(body.id, body.field, body.value); break;
       default: result = { success: false, error: 'Unknown action: ' + action };
@@ -1811,7 +2010,7 @@ function handleGetEquipment() {
   const sheetName = SHEET_NAMES.equipment;
   const sheet = getOrCreateSheet(sheetName);
   if (sheet.getLastRow() < 1) {
-    const defaultHeaders = ['機器ID','機器区分','機器名','型式','製造番号','管理部署','製造元','代理店','ステータス','貸出状態','現在地','保管場所','CH','資産区分','納入日','購入価格','代替レンタルデモ開始日','代替レンタルデモ終了日','保守契約','廃棄','廃棄日','廃棄理由','添付文書URL','備考'];
+    const defaultHeaders = ['機器ID','機器区分','機器名','型式','製造番号','管理部署','製造元','代理店','ステータス','貸出状態','現在地','保管場所','CH','資産区分','納入日','購入価格','代替レンタルデモ開始日','代替レンタルデモ終了日','保守契約','廃棄','廃棄日','廃棄理由','添付文書URL','備考','管理部門','保守契約形態','年間保守費','保守契約開始日','保守契約終了日','初回点検月'];
     sheet.getRange(1, 1, 1, defaultHeaders.length).setValues([defaultHeaders]);
     return { success: true, data: [], headers: defaultHeaders };
   }
@@ -2022,7 +2221,8 @@ const REPAIR_HEADERS = [
   '詳細内容','作業区分','状態','修理内容','見積もり依頼','修理点検依頼',
   '金額','交換部品1','部品単価1','交換部品2','部品単価2','交換部品3','部品単価3',
   '交換部品4','部品単価4','交換部品5','部品単価5','部品合計金額',
-  '修理完了','修理完了日','修理完了時担当','ステータス'
+  '修理完了','修理完了日','修理完了時担当','ステータス',
+  '概算費用','ダウンタイム時間','故障区分','臨床的重要度'
 ];
 
 function handleGetRepairs() {
@@ -2090,7 +2290,9 @@ function handleAddRepair(data) {
     data.partsTotal || '',
     data.repairCompleted ? 'TRUE' : 'FALSE',
     data.completedDate || '', data.completedStaff || '',
-    data.repairStatus || '対応中'
+    data.repairStatus || '対応中',
+    data.estimatedCost || '', data.downtimeHours || '',
+    data.failureType || '', data.clinicalImportance || ''
   ];
   // 既存レコードがあれば更新、なければ追加
   const lastRow = sheet.getLastRow();
@@ -2380,7 +2582,8 @@ function handleGetAll() {
     inspections: handleGetInspections(),
     repairs: handleGetRepairs(),
     inventoryLog: handleGetInventoryLog(),
-    typedInspections: handleGetAllTypedInspections()
+    typedInspections: handleGetAllTypedInspections(),
+    extendedSpecs: handleGetExtendedSpecs()
   };
 }
 
@@ -2408,6 +2611,58 @@ function deleteRowById(sheetName, id) {
     }
   }
   return { success: false, error: id + ' が見つかりません' };
+}
+
+// ===== extended_specs =====
+const EXT_SPEC_HEADERS = ['機器ID','管球型番','管球交換日','管球累積照射回数','管球交換費用','線量管理対象','高額保守契約詳細','保守対応時間','年間稼働時間目標','薬事分類','特記事項'];
+const EXT_SPEC_FIELD_MAP = {
+  '機器ID':'equipmentId','管球型番':'tubeModel','管球交換日':'tubeReplacedDate',
+  '管球累積照射回数':'tubeShotCount','管球交換費用':'tubeReplaceCost','線量管理対象':'isDoseManaged',
+  '高額保守契約詳細':'maintenanceDetail','保守対応時間':'slaResponseHours',
+  '年間稼働時間目標':'annualTargetHours','薬事分類':'regulatoryClass','特記事項':'specialNotes'
+};
+const EXT_SPEC_REVERSE_MAP = {};
+for (const [k,v] of Object.entries(EXT_SPEC_FIELD_MAP)) EXT_SPEC_REVERSE_MAP[v] = k;
+
+function handleGetExtendedSpecs() {
+  const sheet = getOrCreateSheet(SHEET_NAMES.extendedSpecs);
+  if (sheet.getLastRow() < 1) {
+    sheet.getRange(1,1,1,EXT_SPEC_HEADERS.length).setValues([EXT_SPEC_HEADERS]);
+    return { success: true, data: [] };
+  }
+  const result = getSheetData(SHEET_NAMES.extendedSpecs);
+  return { success: true, data: result.rows.map(row => {
+    const obj = {};
+    for (const [k,v] of Object.entries(row)) { obj[EXT_SPEC_FIELD_MAP[k]||k] = v; }
+    return obj;
+  })};
+}
+
+function handleSaveExtendedSpec(data) {
+  const sheet = getOrCreateSheet(SHEET_NAMES.extendedSpecs);
+  if (sheet.getLastRow() < 1) sheet.getRange(1,1,1,EXT_SPEC_HEADERS.length).setValues([EXT_SPEC_HEADERS]);
+  const { headers, map } = getHeaderMap(sheet);
+  const idCol = map['機器ID'];
+  if (!idCol) return { success: false, error: '機器ID列が見つかりません' };
+  const lastRow = sheet.getLastRow();
+  let targetRow = -1;
+  if (lastRow > 1) {
+    const ids = sheet.getRange(2, idCol, lastRow - 1, 1).getValues();
+    for (let i = 0; i < ids.length; i++) {
+      if (String(ids[i][0]) === String(data.equipmentId)) { targetRow = i + 2; break; }
+    }
+  }
+  if (targetRow === -1) targetRow = lastRow + 1;
+  for (const [appField, value] of Object.entries(data)) {
+    const sheetCol = EXT_SPEC_REVERSE_MAP[appField] || appField;
+    const col = map[sheetCol];
+    if (col) sheet.getRange(targetRow, col).setValue(value || '');
+  }
+  return { success: true, message: '拡張仕様を保存しました: ' + data.equipmentId };
+}
+
+function handleDeleteExtendedSpec(id) {
+  return deleteRowById(SHEET_NAMES.extendedSpecs, id);
 }`;
 
 const GAS_CONFIG_KEY = 'ME_GAS_URL';
@@ -2426,8 +2681,29 @@ const SHEET_TO_APP_MAP = {
   'CH': 'channel', '資産区分': 'assetType', '納入日': 'deliveryDate', '購入価格': 'purchasePrice',
   '代替レンタルデモ開始日': 'rentalStartDate', '代替レンタルデモ終了日': 'rentalEndDate',
   '保守契約': 'maintenanceContract', '廃棄日': 'discardDate', '廃棄理由': 'discardReason',
-  '添付文書URL': 'documentUrl', '備考': 'notes'
+  '添付文書URL': 'documentUrl', '備考': 'notes',
+  '管理部門': 'managedByDept', '保守契約形態': 'maintenanceType',
+  '年間保守費': 'annualMaintenanceCost', '保守契約開始日': 'maintenanceStartDate', '保守契約終了日': 'maintenanceEndDate',
+  '初回点検月': 'firstInspectionMonth'
 };
+
+// 維持費率算出
+function calcMaintenanceRatio(eq) {
+  const price = parseFloat(String(eq.purchasePrice || '').replace(/,/g, '')) || 0;
+  const annual = parseFloat(String(eq.annualMaintenanceCost || '').replace(/,/g, '')) || 0;
+  if (price <= 0 || annual <= 0) return null;
+  return (annual / price) * 100;
+}
+function maintenanceRatioBadge(ratio) {
+  if (ratio === null) return '<span class="badge" style="background:var(--gray-100);color:var(--gray-400);font-size:10px">-</span>';
+  const pct = ratio.toFixed(1) + '%';
+  if (ratio >= 25) return '<span class="badge badge-repair" style="font-size:10px">\u26a0 ' + pct + '</span>';
+  if (ratio >= 15) return '<span class="badge badge-lending" style="font-size:10px">\u25b3 ' + pct + '</span>';
+  return '<span class="badge badge-stored" style="font-size:10px">' + pct + '</span>';
+}
+
+// extended_specs ローカルキャッシュ
+let allExtendedSpecs = [];
 const APP_TO_SHEET_MAP = Object.fromEntries(Object.entries(SHEET_TO_APP_MAP).map(([k,v]) => [v,k]));
 
 // Extra columns from spreadsheet (dynamically detected)
@@ -2662,6 +2938,13 @@ async function pullFromSheets() {
       totalCount += invResult.data.length;
     }
 
+    // ── 拡張仕様 (extendedSpecs) ──
+    const extResult = result.extendedSpecs;
+    if (extResult && extResult.success && extResult.data && extResult.data.length > 0) {
+      allExtendedSpecs = extResult.data;
+      totalCount += extResult.data.length;
+    }
+
     lastSyncTime = new Date().toISOString();
     localStorage.setItem('ME_LAST_SYNC', lastSyncTime);
     updateSyncUI('connected', `Sheets同期済 (${totalCount}件)`);
@@ -2698,6 +2981,119 @@ async function pushDeleteToSheets(eqId) {
     console.warn('Delete from Sheets failed, queuing:', e);
     queueSync('deleteEquipment', { id: eqId });
   }
+}
+
+/**
+ * Push extended spec to Google Sheets
+ */
+async function pushExtendedSpecToSheets(specData) {
+  if (!syncEnabled) return;
+  try {
+    await gasPost('saveExtendedSpec', { data: specData });
+  } catch (e) {
+    console.warn('Push extended spec failed:', e);
+  }
+}
+
+/**
+ * Show extended spec edit modal
+ */
+function showExtendedSpecModal(eqId) {
+  const existing = allExtendedSpecs.find(s => s.equipmentId === eqId) || {};
+  const v = (f) => (existing[f] || '').toString().replace(/"/g, '&quot;');
+  const eq = allEquipment.find(e => e.id === eqId);
+
+  document.getElementById('modal').style.maxWidth = '720px';
+  document.getElementById('modalTitle').textContent = `拡張仕様 - ${eqId}${eq ? ' (' + eq.name + ')' : ''}`;
+  document.getElementById('modalBody').innerHTML = `
+    <div style="background:#fefce8;border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:#92400e">
+      放射線・検査領域など高額大型機器に固有の項目を管理します。
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="form-group">
+        <label class="form-label">管球型番</label>
+        <input type="text" class="form-input" id="extTubeModel" value="${v('tubeModel')}" placeholder="X線管球の型番">
+      </div>
+      <div class="form-group">
+        <label class="form-label">管球交換日</label>
+        <input type="date" class="form-input" id="extTubeReplacedDate" value="${v('tubeReplacedDate')}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">管球累積照射回数</label>
+        <input type="number" class="form-input" id="extTubeShotCount" value="${v('tubeShotCount')}" placeholder="回">
+      </div>
+      <div class="form-group">
+        <label class="form-label">管球交換費用 (円)</label>
+        <input type="text" class="form-input" id="extTubeReplaceCost" value="${v('tubeReplaceCost')}" placeholder="例: 5,000,000">
+      </div>
+      <div class="form-group">
+        <label class="form-label">線量管理対象</label>
+        <select class="form-select" id="extIsDoseManaged">
+          <option value="">いいえ</option>
+          <option value="TRUE" ${existing.isDoseManaged==='TRUE'?'selected':''}>はい</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">保守対応時間 (SLA)</label>
+        <input type="number" class="form-input" id="extSlaHours" value="${v('slaResponseHours')}" placeholder="時間">
+      </div>
+      <div class="form-group">
+        <label class="form-label">年間稼働時間目標</label>
+        <input type="number" class="form-input" id="extAnnualTargetHours" value="${v('annualTargetHours')}" placeholder="時間">
+      </div>
+      <div class="form-group">
+        <label class="form-label">薬事分類</label>
+        <select class="form-select" id="extRegulatoryClass">
+          <option value="" ${!existing.regulatoryClass?'selected':''}>選択...</option>
+          <option value="クラスI" ${existing.regulatoryClass==='クラスI'?'selected':''}>クラスI</option>
+          <option value="クラスII" ${existing.regulatoryClass==='クラスII'?'selected':''}>クラスII</option>
+          <option value="クラスIII" ${existing.regulatoryClass==='クラスIII'?'selected':''}>クラスIII</option>
+          <option value="クラスIV" ${existing.regulatoryClass==='クラスIV'?'selected':''}>クラスIV</option>
+        </select>
+      </div>
+      <div class="form-group" style="grid-column:1/-1">
+        <label class="form-label">高額保守契約詳細</label>
+        <textarea class="form-textarea" id="extMaintenanceDetail" rows="2" placeholder="契約書番号、カバー範囲など">${v('maintenanceDetail')}</textarea>
+      </div>
+      <div class="form-group" style="grid-column:1/-1">
+        <label class="form-label">特記事項</label>
+        <textarea class="form-textarea" id="extSpecialNotes" rows="2" placeholder="自由記述">${v('specialNotes')}</textarea>
+      </div>
+    </div>
+  `;
+  document.getElementById('modalFooter').innerHTML = `
+    <button class="btn btn-outline" onclick="closeModal();document.getElementById('modal').style.maxWidth='600px'">キャンセル</button>
+    <button class="btn btn-primary" onclick="saveExtendedSpec('${eqId}')">保存</button>
+  `;
+  openModal();
+}
+
+async function saveExtendedSpec(eqId) {
+  const specData = {
+    equipmentId: eqId,
+    tubeModel: document.getElementById('extTubeModel').value.trim(),
+    tubeReplacedDate: document.getElementById('extTubeReplacedDate').value,
+    tubeShotCount: document.getElementById('extTubeShotCount').value.trim(),
+    tubeReplaceCost: document.getElementById('extTubeReplaceCost').value.trim(),
+    isDoseManaged: document.getElementById('extIsDoseManaged').value,
+    slaResponseHours: document.getElementById('extSlaHours').value.trim(),
+    annualTargetHours: document.getElementById('extAnnualTargetHours').value.trim(),
+    regulatoryClass: document.getElementById('extRegulatoryClass').value,
+    maintenanceDetail: document.getElementById('extMaintenanceDetail').value.trim(),
+    specialNotes: document.getElementById('extSpecialNotes').value.trim()
+  };
+
+  // Update local cache
+  const idx = allExtendedSpecs.findIndex(s => s.equipmentId === eqId);
+  if (idx >= 0) allExtendedSpecs[idx] = specData;
+  else allExtendedSpecs.push(specData);
+
+  // Sync to Sheets
+  pushExtendedSpecToSheets(specData);
+
+  closeModal();
+  document.getElementById('modal').style.maxWidth = '600px';
+  showToast('拡張仕様を保存しました', 'success');
 }
 
 /**
@@ -3152,13 +3548,17 @@ async function initApp() {
   // Google Sheets sync on startup
   if (syncEnabled) {
     updateSyncUI('syncing', '同期中...');
+    const syncLoadingEl = document.getElementById('loadingOverlay');
+    const syncLoadingTimer = setTimeout(() => { syncLoadingEl.classList.add('show'); }, 500);
     pullFromSheets().then(ok => {
+      clearTimeout(syncLoadingTimer);
+      syncLoadingEl.classList.remove('show');
       if (ok) {
         // Refresh current view after sync
         renderAreaGrid();
         populateFilters();
       }
-    }).catch(() => {});
+    }).catch(() => { clearTimeout(syncLoadingTimer); syncLoadingEl.classList.remove('show'); });
     // Process any queued operations from previous offline sessions
     const savedQueue = localStorage.getItem('ME_SYNC_QUEUE');
     if (savedQueue) {
@@ -3257,8 +3657,9 @@ function showScreen(name) {
 
   const titles = {
     lending: '貸出・返却', status: '貸出状況', equipment: '機器一覧（使用可能機器）',
-    inspection: '点検登録', repair: '修理記録', history: '貸出履歴', dashboard: 'ダッシュボード',
-    utilization: '稼働率分析',
+    inspection: '点検登録', repair: '修理記録', 'quick-repair': '修理依頼(簡易)',
+    'repair-dashboard': '修理分析', history: '貸出履歴', dashboard: 'ダッシュボード',
+    utilization: '稼働率分析', lifecycle: 'ライフサイクル・アドバイザー',
     'master-equipment': '機器マスター管理', 'master-staff': 'スタッフ管理',
     'master-dept': '部署管理', 'master-area': '貸出エリア管理', 'master-items': '物品マスター',
     inventory: '入出庫管理', orders: '発注管理'
@@ -3266,25 +3667,43 @@ function showScreen(name) {
   document.getElementById('screenTitle').textContent = titles[name] || '';
   location.hash = name;
 
-  // Screen-specific init
-  if (name === 'status') renderStatusScreen();
-  if (name === 'equipment') { eqPage = 0; filterEquipment(); }
-  if (name === 'history') renderHistory();
-  if (name === 'dashboard') renderDashboard();
-  if (name === 'repair') renderRepairs();
-  if (name === 'lending') {
+  // Screen-specific init with loading overlay (shows after 500ms delay)
+  const loadingEl = document.getElementById('loadingOverlay');
+  let loadingTimer = null;
+  let initPromise = null;
+
+  if (name === 'status') initPromise = renderStatusScreen();
+  else if (name === 'equipment') { eqPage = 0; initPromise = filterEquipment(); }
+  else if (name === 'history') initPromise = renderHistory();
+  else if (name === 'dashboard') initPromise = renderDashboard();
+  else if (name === 'repair') initPromise = renderRepairs();
+  else if (name === 'lending') {
     document.getElementById('barcodeInput').focus();
-    renderRecentActivity();
+    initPromise = renderRecentActivity();
   }
-  if (name === 'master-equipment') { meqPage = 0; initMasterEquipment(); }
-  if (name === 'master-staff') renderStaffList();
-  if (name === 'master-dept') renderDeptList();
-  if (name === 'master-area') renderAreaList();
-  if (name === 'master-items') initItemsMaster();
-  if (name === 'inventory') initInventory();
-  if (name === 'orders') initOrders();
-  if (name === 'utilization') initUtilization();
-  if (name === 'inspection') initInspectionScreen();
+  else if (name === 'master-equipment') { meqPage = 0; initPromise = initMasterEquipment(); }
+  else if (name === 'master-staff') initPromise = renderStaffList();
+  else if (name === 'master-dept') initPromise = renderDeptList();
+  else if (name === 'master-area') initPromise = renderAreaList();
+  else if (name === 'master-items') initPromise = initItemsMaster();
+  else if (name === 'inventory') initPromise = initInventory();
+  else if (name === 'orders') initPromise = initOrders();
+  else if (name === 'utilization') initPromise = initUtilization();
+  else if (name === 'inspection') initPromise = initInspectionScreen();
+  else if (name === 'quick-repair') initPromise = initQuickRepair();
+  else if (name === 'repair-dashboard') initPromise = renderRepairDashboard();
+  else if (name === 'lifecycle') initPromise = renderLifecycle();
+
+  if (initPromise && typeof initPromise.then === 'function') {
+    loadingTimer = setTimeout(() => { loadingEl.classList.add('show'); }, 500);
+    initPromise.then(() => {
+      clearTimeout(loadingTimer);
+      loadingEl.classList.remove('show');
+    }).catch(() => {
+      clearTimeout(loadingTimer);
+      loadingEl.classList.remove('show');
+    });
+  }
 
   // Close mobile sidebar
   closeSidebar();
@@ -3916,7 +4335,13 @@ function showEquipmentModal(eq) {
     return;
   }
 
+  const ratio = calcMaintenanceRatio(eq);
+  const extSpec = allExtendedSpecs.find(s => s.equipmentId === eq.id);
+  const deptBadgeColors = {ME:['#dbeafe','#1e40af'],放射線:['#fef3c7','#92400e'],検査:['#d1fae5','#065f46'],リハビリ:['#ede9fe','#5b21b6'],共用:['var(--gray-100)','var(--gray-600)']};
+  const dc = deptBadgeColors[eq.managedByDept] || ['var(--gray-100)','var(--gray-400)'];
+
   document.getElementById('modalTitle').textContent = `${eq.id} - 機器詳細`;
+  document.getElementById('modal').style.maxWidth = '720px';
   document.getElementById('modalBody').innerHTML = `
     <div class="detail-grid">
       <div class="detail-item"><div class="label">機器ID</div><div class="value" style="color:var(--primary);font-weight:700">${eq.id}</div></div>
@@ -3925,18 +4350,52 @@ function showEquipmentModal(eq) {
       <div class="detail-item"><div class="label">型式</div><div class="value">${eq.model || '-'}</div></div>
       <div class="detail-item"><div class="label">製造番号</div><div class="value">${eq.serial || '-'}</div></div>
       <div class="detail-item"><div class="label">管理部署</div><div class="value">${eq.dept || '-'}</div></div>
+      <div class="detail-item"><div class="label">管理部門</div><div class="value"><span class="badge" style="background:${dc[0]};color:${dc[1]};font-size:11px">${eq.managedByDept || '未設定'}</span></div></div>
       <div class="detail-item"><div class="label">製造元</div><div class="value">${eq.manufacturer || '-'}</div></div>
       <div class="detail-item"><div class="label">ステータス</div><div class="value">${getStatusBadge(eq.lending || eq.status)}</div></div>
       <div class="detail-item"><div class="label">保管場所</div><div class="value">${eq.storage || '-'}</div></div>
       <div class="detail-item"><div class="label">現在地</div><div class="value" style="font-weight:700">${eq.location || '-'}</div></div>
       <div class="detail-item"><div class="label">廃棄</div><div class="value">${eq.discard || '-'}</div></div>
     </div>
+    <!-- 保守契約・維持費率 -->
+    <div style="margin-top:16px;padding:14px 18px;background:var(--gray-50);border-radius:10px;border:1px solid var(--gray-200)">
+      <div style="font-size:13px;font-weight:700;color:var(--gray-600);margin-bottom:10px">保守契約・維持費率</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+        <div><div style="font-size:11px;color:var(--gray-400)">保守契約形態</div><div style="font-size:14px;font-weight:600">${eq.maintenanceType || '-'}</div></div>
+        <div><div style="font-size:11px;color:var(--gray-400)">購入価格</div><div style="font-size:14px;font-weight:600">${eq.purchasePrice ? Number(String(eq.purchasePrice).replace(/,/g,'')).toLocaleString() + '円' : '-'}</div></div>
+        <div><div style="font-size:11px;color:var(--gray-400)">年間保守費</div><div style="font-size:14px;font-weight:600">${eq.annualMaintenanceCost ? Number(String(eq.annualMaintenanceCost).replace(/,/g,'')).toLocaleString() + '円' : '-'}</div></div>
+        <div><div style="font-size:11px;color:var(--gray-400)">維持費率</div><div style="font-size:18px;font-weight:700">${ratio !== null ? maintenanceRatioBadge(ratio) : '<span style="color:var(--gray-400)">-</span>'}</div></div>
+        <div><div style="font-size:11px;color:var(--gray-400)">契約期間</div><div style="font-size:13px">${eq.maintenanceStartDate || eq.maintenanceEndDate ? (eq.maintenanceStartDate||'?') + ' 〜 ' + (eq.maintenanceEndDate||'?') : '-'}</div></div>
+        <div><div style="font-size:11px;color:var(--gray-400)">保守契約</div><div style="font-size:14px">${eq.maintenanceContract || '-'}</div></div>
+      </div>
+    </div>
+    ${extSpec ? `
+    <!-- 拡張仕様 (extended_specs) -->
+    <div style="margin-top:12px;padding:14px 18px;background:#fefce8;border-radius:10px;border:1px solid #fde68a">
+      <div style="font-size:13px;font-weight:700;color:#92400e;margin-bottom:10px">拡張仕様</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px">
+        ${extSpec.tubeModel ? '<div><span style="color:var(--gray-400)">管球型番:</span> <strong>'+extSpec.tubeModel+'</strong></div>' : ''}
+        ${extSpec.tubeReplacedDate ? '<div><span style="color:var(--gray-400)">管球交換日:</span> '+extSpec.tubeReplacedDate+'</div>' : ''}
+        ${extSpec.tubeShotCount ? '<div><span style="color:var(--gray-400)">管球累積照射回数:</span> '+Number(extSpec.tubeShotCount).toLocaleString()+'回</div>' : ''}
+        ${extSpec.tubeReplaceCost ? '<div><span style="color:var(--gray-400)">管球交換費用:</span> '+Number(extSpec.tubeReplaceCost).toLocaleString()+'円</div>' : ''}
+        ${extSpec.isDoseManaged === 'TRUE' ? '<div><span style="badge badge-lending" style="font-size:11px">線量管理対象</span></div>' : ''}
+        ${extSpec.maintenanceDetail ? '<div style="grid-column:1/-1"><span style="color:var(--gray-400)">保守契約詳細:</span> '+extSpec.maintenanceDetail+'</div>' : ''}
+        ${extSpec.slaResponseHours ? '<div><span style="color:var(--gray-400)">SLA応答時間:</span> '+extSpec.slaResponseHours+'時間</div>' : ''}
+        ${extSpec.annualTargetHours ? '<div><span style="color:var(--gray-400)">年間稼働時間目標:</span> '+extSpec.annualTargetHours+'時間</div>' : ''}
+        ${extSpec.regulatoryClass ? '<div><span style="color:var(--gray-400)">薬事分類:</span> '+extSpec.regulatoryClass+'</div>' : ''}
+        ${extSpec.specialNotes ? '<div style="grid-column:1/-1"><span style="color:var(--gray-400)">特記事項:</span> '+extSpec.specialNotes+'</div>' : ''}
+      </div>
+    </div>` : ''}
     <div style="margin-top:12px;padding:10px;background:var(--gray-50);border-radius:8px;text-align:center;font-size:13px;color:var(--gray-500)">
       &#9432; 貸出するにはエリアを選択してからスキャンしてください
     </div>
   `;
 
-  document.getElementById('modalFooter').innerHTML = '<button class="btn btn-outline" onclick="closeModal()">閉じる</button>';
+  const showExtSpecBtn = eq.managedByDept && eq.managedByDept !== 'ME';
+  document.getElementById('modalFooter').innerHTML = `
+    ${showExtSpecBtn ? '<button class="btn btn-outline" onclick="closeModal();showExtendedSpecModal(\''+eq.id+'\')">拡張仕様を編集</button>' : ''}
+    <button class="btn btn-outline" onclick="closeModal();document.getElementById(\'modal\').style.maxWidth=\'600px\'">閉じる</button>
+  `;
   openModal();
 }
 
@@ -5170,7 +5629,11 @@ async function saveRepairsToDb(dataArr) {
       repairCompleted: isCompleted,
       completedDate: r['修理完了日'] || r.completedDate || '',
       completedStaff: r['修理完了時担当'] || r.completedStaff || '',
-      repairStatus: r['ステータス'] || r.repairStatus || (isCompleted ? '完了' : '対応中')
+      repairStatus: r['ステータス'] || r.repairStatus || (isCompleted ? '完了' : '対応中'),
+      estimatedCost: r['概算費用'] || r.estimatedCost || '',
+      downtimeHours: r['ダウンタイム時間'] || r.downtimeHours || '',
+      failureType: r['故障区分'] || r.failureType || '',
+      clinicalImportance: r['臨床的重要度'] || r.clinicalImportance || ''
     });
   }
   await new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = rej; });
@@ -5476,7 +5939,11 @@ async function submitRepair(editId) {
     repairCompleted: document.getElementById('repairCompleted').checked,
     completedDate: document.getElementById('repairCompleted').checked ? document.getElementById('repairCompleteDate').value : '',
     completedStaff: document.getElementById('repairCompleted').checked ? document.getElementById('repairCompleteStaff').value : '',
-    repairStatus: document.getElementById('repairCompleted').checked ? '完了' : '対応中'
+    repairStatus: document.getElementById('repairCompleted').checked ? '完了' : '対応中',
+    estimatedCost: document.getElementById('repairCost').value || '',
+    downtimeHours: '',
+    failureType: '',
+    clinicalImportance: ''
   };
 
   await dbPut('repairs', repair);
@@ -5605,6 +6072,519 @@ async function deleteRepair(repairId) {
   document.getElementById('modal').style.maxWidth = '600px';
   renderRepairs();
   showToast('修理記録を削除しました', 'success');
+}
+
+// ===================== QUICK REPAIR (スマホ修理依頼) =====================
+async function initQuickRepair() {
+  const depts = await dbGetAll('departments');
+  const staffList = await dbGetAll('staff');
+  const deptSel = document.getElementById('qrepDept');
+  const staffSel = document.getElementById('qrepStaff');
+  deptSel.innerHTML = '<option value="">選択...</option>' + depts.map(d => `<option value="${d.name}">${d.name}</option>`).join('');
+  staffSel.innerHTML = '<option value="">選択...</option>' + staffList.map(s => `<option value="${s.name}">${s.name} (${s.dept})</option>`).join('');
+  const input = document.getElementById('qrepBarcodeInput');
+  input.focus();
+  input.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); lookupQuickRepairEq(); } };
+  // URLパラメータから機器ID取得 (QRコードリンク対応)
+  const urlEqId = new URLSearchParams(location.search).get('repair_eq');
+  if (urlEqId) { input.value = urlEqId; lookupQuickRepairEq(); }
+}
+
+function lookupQuickRepairEq() {
+  const raw = document.getElementById('qrepBarcodeInput').value.trim();
+  if (!raw) return;
+  const eqId = cleanScannedId ? cleanScannedId(raw) : raw;
+  const eq = allEquipment.find(e => e.id === eqId);
+  const statusEl = document.getElementById('qrepBarcodeStatus');
+  const formArea = document.getElementById('qrepFormArea');
+
+  if (!eq) {
+    statusEl.innerHTML = `<span style="color:#fca5a5">&#9888; 機器ID「${eqId}」は見つかりません</span>`;
+    formArea.style.display = 'none';
+    return;
+  }
+
+  statusEl.innerHTML = `<span style="color:#6ee7b7">&#10004; ${eq.name}</span>`;
+  formArea.style.display = 'block';
+  formArea.dataset.eqId = eq.id;
+
+  const dc = {ME:['#dbeafe','#1e40af'],放射線:['#fef3c7','#92400e'],検査:['#d1fae5','#065f46']}[eq.managedByDept] || ['var(--gray-100)','var(--gray-600)'];
+  document.getElementById('qrepEqTitle').textContent = eq.name;
+  document.getElementById('qrepEqBadge').innerHTML = `<span class="badge" style="background:${dc[0]};color:${dc[1]}">${eq.managedByDept||'未設定'}</span>`;
+  document.getElementById('qrepEqInfo').innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:14px">
+      <div><span style="color:var(--gray-400)">機器ID:</span> <strong>${eq.id}</strong></div>
+      <div><span style="color:var(--gray-400)">型式:</span> ${eq.model||'-'}</div>
+      <div><span style="color:var(--gray-400)">管理部署:</span> ${eq.dept||'-'}</div>
+      <div><span style="color:var(--gray-400)">保管場所:</span> ${eq.storage||'-'}</div>
+      <div><span style="color:var(--gray-400)">ステータス:</span> ${getStatusBadge(eq.lending||eq.status)}</div>
+      <div><span style="color:var(--gray-400)">製造元:</span> ${eq.manufacturer||'-'}</div>
+    </div>`;
+  // 依頼部署を機器の管理部署でプリセレクト
+  if (eq.dept) {
+    const deptSel = document.getElementById('qrepDept');
+    for (let i = 0; i < deptSel.options.length; i++) {
+      if (deptSel.options[i].value === eq.dept) { deptSel.selectedIndex = i; break; }
+    }
+  }
+}
+
+async function submitQuickRepair() {
+  const eqId = document.getElementById('qrepFormArea').dataset.eqId;
+  if (!eqId) { showToast('機器をスキャンしてください', 'error'); return; }
+  const failureType = document.querySelector('input[name="qrepFType"]:checked');
+  if (!failureType) { showToast('故障区分を選択してください', 'error'); return; }
+  const clinicalImportance = document.getElementById('qrepClinicalImportance').value;
+  if (!clinicalImportance) { showToast('臨床的重要度を選択してください', 'error'); return; }
+  const description = document.getElementById('qrepDescription').value.trim();
+  if (!description) { showToast('不具合内容を入力してください', 'error'); return; }
+  const estCost = document.getElementById('qrepEstCost').value.trim();
+  if (!estCost) { showToast('概算費用を入力してください', 'error'); return; }
+  const downtime = document.getElementById('qrepDowntime').value.trim();
+  if (!downtime) { showToast('ダウンタイムを入力してください', 'error'); return; }
+
+  const eq = allEquipment.find(e => e.id === eqId);
+  const repair = {
+    repairId: generateId(),
+    equipmentId: eqId,
+    equipmentName: eq ? eq.name : '',
+    receptionDate: new Date().toISOString().slice(0,10),
+    date: new Date().toISOString().slice(0,10),
+    requestDept: document.getElementById('qrepDept').value,
+    occurrence: '使用中',
+    description: description,
+    workCategory: '',
+    condition: '',
+    action: '',
+    estimateRequest: false,
+    inspectionRequest: false,
+    cost: estCost,
+    estimatedCost: estCost,
+    downtimeHours: downtime,
+    failureType: failureType.value,
+    clinicalImportance: clinicalImportance,
+    repairCompleted: false,
+    repairStatus: '対応中',
+    part1:'',partPrice1:'',part2:'',partPrice2:'',part3:'',partPrice3:'',
+    part4:'',partPrice4:'',part5:'',partPrice5:'',partsTotal:'',
+    completedDate:'',completedStaff:''
+  };
+
+  await dbPut('repairs', repair);
+  if (syncEnabled) {
+    try { await gasPost('addRepair', { data: repair }); }
+    catch(e) { queueSync('addRepair', { data: repair }); }
+  }
+
+  showToast('修理依頼を送信しました', 'success');
+  // フォームリセット
+  document.getElementById('qrepFormArea').style.display = 'none';
+  document.getElementById('qrepBarcodeInput').value = '';
+  document.getElementById('qrepBarcodeStatus').innerHTML = '';
+  document.querySelectorAll('input[name="qrepFType"]').forEach(r => { r.checked = false; r.parentElement.className = 'btn btn-outline btn-sm'; r.parentElement.style.color = ''; });
+  document.getElementById('qrepClinicalImportance').value = '';
+  document.getElementById('qrepDescription').value = '';
+  document.getElementById('qrepEstCost').value = '';
+  document.getElementById('qrepDowntime').value = '';
+  document.getElementById('qrepBarcodeInput').focus();
+}
+
+// ===================== REPAIR DASHBOARD (修理分析) =====================
+async function renderRepairDashboard() {
+  const repairs = await dbGetAll('repairs');
+  const now = new Date();
+  const thisYear = now.getFullYear();
+  const yearRepairs = repairs.filter(r => {
+    const d = r.receptionDate || r.date || '';
+    return d.startsWith(String(thisYear));
+  });
+
+  // 全体統計
+  const totalCost = yearRepairs.reduce((s, r) => s + (parseFloat(String(r.estimatedCost||r.cost||'').replace(/,/g,'')) || 0), 0);
+  const totalDowntime = yearRepairs.reduce((s, r) => s + (parseFloat(r.downtimeHours) || 0), 0);
+  const suddenCount = yearRepairs.filter(r => r.failureType === '突発故障').length;
+  const suddenRate = yearRepairs.length > 0 ? (suddenCount / yearRepairs.length * 100).toFixed(1) : '0';
+
+  document.getElementById('repDashStats').innerHTML = `
+    <div class="stat-card blue"><div class="stat-label">${thisYear}年 修理件数</div><div class="stat-value">${yearRepairs.length}</div></div>
+    <div class="stat-card red"><div class="stat-label">${thisYear}年 累計修理費</div><div class="stat-value">${totalCost.toLocaleString()}<span style="font-size:14px">円</span></div></div>
+    <div class="stat-card orange"><div class="stat-label">累計ダウンタイム</div><div class="stat-value">${totalDowntime.toLocaleString()}<span style="font-size:14px">時間</span></div></div>
+    <div class="stat-card ${parseFloat(suddenRate)>=30?'red':'green'}"><div class="stat-label">突発故障率</div><div class="stat-value">${suddenRate}<span style="font-size:14px">%</span></div></div>
+  `;
+
+  // 部門別年間累計修理費
+  const deptMap = {};
+  yearRepairs.forEach(r => {
+    const dept = r.requestDept || '不明';
+    if (!deptMap[dept]) deptMap[dept] = { cost: 0, count: 0, sudden: 0, downtime: 0 };
+    deptMap[dept].cost += (parseFloat(String(r.estimatedCost||r.cost||'').replace(/,/g,'')) || 0);
+    deptMap[dept].count++;
+    if (r.failureType === '突発故障') deptMap[dept].sudden++;
+    deptMap[dept].downtime += (parseFloat(r.downtimeHours) || 0);
+  });
+  const deptArr = Object.entries(deptMap).sort((a,b) => b[1].cost - a[1].cost);
+  const maxCost = deptArr.length > 0 ? deptArr[0][1].cost : 1;
+
+  document.getElementById('repDashDeptCost').innerHTML = deptArr.length === 0
+    ? '<p style="color:var(--gray-400);text-align:center">データなし</p>'
+    : `<table class="eq-table"><thead><tr><th>部門</th><th>件数</th><th>年間修理費</th><th style="width:40%">割合</th></tr></thead><tbody>`
+      + deptArr.map(([dept, d]) => `<tr><td style="font-weight:600">${dept}</td><td>${d.count}</td>
+        <td style="font-weight:700;color:var(--danger)">${d.cost.toLocaleString()}円</td>
+        <td><div style="display:flex;align-items:center;gap:8px"><div style="flex:1;height:20px;background:var(--gray-100);border-radius:4px;overflow:hidden"><div style="height:100%;width:${(d.cost/maxCost*100).toFixed(0)}%;background:linear-gradient(90deg,var(--primary),var(--danger));border-radius:4px"></div></div><span style="font-size:11px;min-width:40px">${totalCost>0?(d.cost/totalCost*100).toFixed(1)+'%':'-'}</span></div></td></tr>`).join('')
+      + '</tbody></table>';
+
+  // 突発故障率
+  document.getElementById('repDashFailureRate').innerHTML = deptArr.length === 0
+    ? '<p style="color:var(--gray-400);text-align:center">データなし</p>'
+    : deptArr.map(([dept, d]) => {
+        const rate = d.count > 0 ? (d.sudden / d.count * 100).toFixed(1) : '0';
+        const color = parseFloat(rate) >= 50 ? 'var(--danger)' : parseFloat(rate) >= 30 ? 'var(--warning)' : 'var(--success)';
+        return `<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--gray-100)">
+          <span style="font-weight:600;min-width:100px">${dept}</span>
+          <div style="flex:1;height:24px;background:var(--gray-100);border-radius:6px;overflow:hidden">
+            <div style="height:100%;width:${rate}%;background:${color};border-radius:6px;transition:width .3s"></div>
+          </div>
+          <span style="font-weight:700;color:${color};min-width:60px;text-align:right">${rate}%</span>
+          <span style="font-size:11px;color:var(--gray-400)">(${d.sudden}/${d.count})</span>
+        </div>`;
+      }).join('');
+
+  // 月別推移
+  const monthMap = {};
+  yearRepairs.forEach(r => {
+    const m = (r.receptionDate || r.date || '').substring(0,7);
+    if (m) monthMap[m] = (monthMap[m] || 0) + (parseFloat(String(r.estimatedCost||r.cost||'').replace(/,/g,'')) || 0);
+  });
+  const months = [];
+  for (let m = 1; m <= 12; m++) {
+    const key = thisYear + '-' + String(m).padStart(2,'0');
+    months.push({ month: m + '月', cost: monthMap[key] || 0 });
+  }
+  const maxMonth = Math.max(...months.map(m => m.cost), 1);
+  document.getElementById('repDashMonthly').innerHTML = `
+    <div style="display:flex;align-items:flex-end;gap:6px;height:200px;padding-top:20px">
+      ${months.map(m => `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px">
+        <span style="font-size:10px;color:var(--gray-500)">${m.cost > 0 ? (m.cost/10000).toFixed(0)+'万' : ''}</span>
+        <div style="width:100%;height:${Math.max(m.cost/maxMonth*160, m.cost>0?4:0)}px;background:${m.cost>0?'linear-gradient(180deg,var(--primary),var(--primary-dark))':'var(--gray-200)'};border-radius:4px 4px 0 0"></div>
+        <span style="font-size:11px;font-weight:600">${m.month}</span>
+      </div>`).join('')}
+    </div>`;
+
+  // 故障多発機器 TOP10
+  const eqRepairMap = {};
+  repairs.forEach(r => {
+    const eid = r.equipmentId;
+    if (!eid) return;
+    if (!eqRepairMap[eid]) eqRepairMap[eid] = { count: 0, cost: 0, name: r.equipmentName || '' };
+    eqRepairMap[eid].count++;
+    eqRepairMap[eid].cost += (parseFloat(String(r.estimatedCost||r.cost||'').replace(/,/g,'')) || 0);
+  });
+  const topFail = Object.entries(eqRepairMap).sort((a,b) => b[1].count - a[1].count).slice(0,10);
+  document.getElementById('repDashTopFailures').innerHTML = topFail.length === 0
+    ? '<p style="color:var(--gray-400);text-align:center">データなし</p>'
+    : `<table class="eq-table"><thead><tr><th>#</th><th>機器ID</th><th>機器名</th><th>故障回数</th><th>累計修理費</th></tr></thead><tbody>`
+      + topFail.map(([eid, d], i) => `<tr><td style="font-weight:700;color:${i<3?'var(--danger)':'var(--gray-500)'}">${i+1}</td>
+        <td class="eq-id">${eid}</td><td>${d.name}</td>
+        <td style="font-weight:700;text-align:center">${d.count}回</td>
+        <td style="font-weight:600;color:var(--danger)">${d.cost.toLocaleString()}円</td></tr>`).join('')
+      + '</tbody></table>';
+}
+
+// ===================== LIFECYCLE ADVISOR =====================
+// 法定耐用年数テーブル（医療機器）
+const USEFUL_LIFE_YEARS = {
+  '人工呼吸器': 6, 'ECMO': 6, 'PCPS': 6, 'IABP': 6,
+  '麻酔器': 7, '電気メス': 6, '除細動器': 6, 'AED': 6,
+  '輸液ポンプ': 6, 'シリンジポンプ': 6,
+  'ベッドサイドモニター': 6, '生体情報モニター': 6, 'テレメーター': 6,
+  '超音波': 6, 'エコー': 6,
+  'CT': 6, 'MRI': 6, 'X線': 6, 'アンギオ': 6,
+  '内視鏡': 6, '顕微鏡': 10,
+  '保育器': 6, '光線治療器': 6, '低圧持続吸引': 6,
+  'パルスオキシメータ': 6, '経腸栄養ポンプ': 6,
+  'default': 6
+};
+
+function getUsefulLife(eq) {
+  const name = (eq.name || '') + (eq.category || '');
+  for (const [key, years] of Object.entries(USEFUL_LIFE_YEARS)) {
+    if (key !== 'default' && name.includes(key)) return years;
+  }
+  return USEFUL_LIFE_YEARS.default;
+}
+
+function calcLifecycleData(eq, repairs) {
+  const purchasePrice = parseFloat(String(eq.purchasePrice || '').replace(/,/g,'')) || 0;
+  const deliveryDate = eq.deliveryDate ? new Date(eq.deliveryDate) : null;
+  const usefulLife = getUsefulLife(eq);
+  const now = new Date();
+
+  // 経過年数
+  const ageYears = deliveryDate ? ((now - deliveryDate) / (365.25 * 24 * 60 * 60 * 1000)) : null;
+
+  // 法定耐用年数満了日
+  const eolDate = deliveryDate ? new Date(deliveryDate.getTime() + usefulLife * 365.25 * 24 * 60 * 60 * 1000) : null;
+  const isOverEol = eolDate ? now > eolDate : false;
+  const remainingYears = eolDate ? ((eolDate - now) / (365.25 * 24 * 60 * 60 * 1000)) : null;
+
+  // 累計修理費
+  const eqRepairs = repairs.filter(r => r.equipmentId === eq.id);
+  const totalRepairCost = eqRepairs.reduce((s, r) => s + (parseFloat(String(r.estimatedCost||r.cost||'').replace(/,/g,'')) || 0), 0);
+  const repairCostRatio = purchasePrice > 0 ? (totalRepairCost / purchasePrice * 100) : 0;
+  const earlyReplace = repairCostRatio >= 50;
+
+  // 年間保守費
+  const annualMaint = parseFloat(String(eq.annualMaintenanceCost || '').replace(/,/g,'')) || 0;
+
+  // 故障頻度（年間平均）
+  const failureFreq = ageYears && ageYears > 0 ? eqRepairs.length / ageYears : eqRepairs.length;
+
+  // 突発故障数
+  const suddenFailures = eqRepairs.filter(r => r.failureType === '突発故障').length;
+
+  // 臨床的重要度（修理記録から最大値を取得、なければデフォルト2）
+  const importanceValues = eqRepairs.map(r => parseInt(r.clinicalImportance) || 0).filter(v => v > 0);
+  const clinicalImportance = importanceValues.length > 0 ? Math.max(...importanceValues) : 2;
+
+  // 3軸スコアリング
+  const freqScore = Math.min(failureFreq * 10, 30);  // 故障頻度 max30
+  const costScore = Math.min(repairCostRatio * 0.6 + (annualMaint > 0 && purchasePrice > 0 ? (annualMaint/purchasePrice*100)*0.3 : 0), 40); // 保守コスト max40
+  const clinicalScore = clinicalImportance * 6; // 臨床的重要度 max30
+  const totalScore = freqScore + costScore + clinicalScore;
+
+  // 更新推奨フラグ
+  let recommendation = '経過観察';
+  let recommendColor = 'var(--success)';
+  if (earlyReplace || isOverEol) {
+    recommendation = earlyReplace ? '早期更新推奨' : '更新時期到来';
+    recommendColor = 'var(--danger)';
+  } else if (remainingYears !== null && remainingYears <= 1) {
+    recommendation = '翌年度更新対象';
+    recommendColor = 'var(--warning)';
+  } else if (remainingYears !== null && remainingYears <= 2) {
+    recommendation = '更新準備推奨';
+    recommendColor = '#d97706';
+  }
+
+  return {
+    eq, purchasePrice, deliveryDate, usefulLife, ageYears, eolDate, isOverEol, remainingYears,
+    totalRepairCost, repairCostRatio, earlyReplace, annualMaint,
+    failureFreq, suddenFailures, clinicalImportance,
+    freqScore, costScore, clinicalScore, totalScore,
+    recommendation, recommendColor, repairCount: eqRepairs.length
+  };
+}
+
+async function renderLifecycle() {
+  const repairs = await dbGetAll('repairs');
+  const deptFilter = document.getElementById('lcDeptFilter')?.value || '';
+
+  // 通知設定ロード
+  const slackUrl = localStorage.getItem('ME_SLACK_WEBHOOK') || '';
+  const notifyEmail = localStorage.getItem('ME_NOTIFY_EMAIL') || '';
+  document.getElementById('lcSlackWebhook').value = slackUrl;
+  document.getElementById('lcNotifyEmail').value = notifyEmail;
+
+  let targets = allEquipment.filter(e => isEquipmentActive(e));
+  if (deptFilter) targets = targets.filter(e => e.managedByDept === deptFilter);
+
+  const lcData = targets.map(eq => calcLifecycleData(eq, repairs)).filter(d => d.deliveryDate);
+  lcData.sort((a, b) => b.totalScore - a.totalScore);
+
+  // サマリー
+  const overEol = lcData.filter(d => d.isOverEol).length;
+  const earlyReplace = lcData.filter(d => d.earlyReplace).length;
+  const nextYear = lcData.filter(d => d.remainingYears !== null && d.remainingYears <= 1 && !d.isOverEol).length;
+  const totalBudget = lcData.filter(d => d.isOverEol || d.earlyReplace || (d.remainingYears !== null && d.remainingYears <= 1)).reduce((s, d) => s + d.purchasePrice, 0);
+
+  document.getElementById('lcSummary').innerHTML = `
+    <div class="stat-card red"><div class="stat-label">耐用年数超過</div><div class="stat-value">${overEol}<span style="font-size:14px">台</span></div></div>
+    <div class="stat-card orange"><div class="stat-label">早期更新推奨</div><div class="stat-value">${earlyReplace}<span style="font-size:14px">台</span></div></div>
+    <div class="stat-card blue"><div class="stat-label">翌年度更新対象</div><div class="stat-value">${nextYear}<span style="font-size:14px">台</span></div></div>
+    <div class="stat-card green"><div class="stat-label">更新予算概算</div><div class="stat-value">${(totalBudget/10000).toFixed(0)}<span style="font-size:14px">万円</span></div></div>
+  `;
+
+  // 部門別翌年度更新予算
+  const budgetMap = {};
+  lcData.filter(d => d.isOverEol || d.earlyReplace || (d.remainingYears !== null && d.remainingYears <= 1)).forEach(d => {
+    const dept = d.eq.managedByDept || '未設定';
+    if (!budgetMap[dept]) budgetMap[dept] = { count: 0, budget: 0, items: [] };
+    budgetMap[dept].count++;
+    budgetMap[dept].budget += d.purchasePrice;
+    budgetMap[dept].items.push(d);
+  });
+  const budgetArr = Object.entries(budgetMap).sort((a,b) => b[1].budget - a[1].budget);
+  document.getElementById('lcBudgetTable').innerHTML = budgetArr.length === 0
+    ? '<p style="color:var(--gray-400);text-align:center">更新対象機器なし</p>'
+    : `<table class="eq-table"><thead><tr><th>部門</th><th>対象台数</th><th>更新予算概算</th><th>主要機器</th><th>根拠</th></tr></thead><tbody>`
+      + budgetArr.map(([dept, d]) => `<tr>
+        <td style="font-weight:700">${dept}</td><td style="text-align:center">${d.count}台</td>
+        <td style="font-weight:700;color:var(--danger);font-size:16px">${(d.budget/10000).toFixed(0)}万円</td>
+        <td style="font-size:12px">${d.items.slice(0,3).map(i=>i.eq.name).join(', ')}${d.items.length>3?'..':''}</td>
+        <td style="font-size:11px">${d.items.map(i=>i.recommendation).join(', ')}</td></tr>`).join('')
+      + '</tbody></table>';
+
+  // 3軸スコアリング 優先順位テーブル
+  const top = lcData.slice(0, 30);
+  document.getElementById('lcPriorityTable').innerHTML = top.length === 0
+    ? '<p style="color:var(--gray-400);text-align:center">データなし</p>'
+    : `<table class="eq-table"><thead><tr>
+        <th>#</th><th>機器ID</th><th>機器名</th><th>部門</th><th>経過年</th><th>耐用年</th>
+        <th title="故障頻度(年平均)×10 max30">故障<br><span style="font-weight:400;font-size:10px">/30</span></th>
+        <th title="修理費率+維持費率 max40">コスト<br><span style="font-weight:400;font-size:10px">/40</span></th>
+        <th title="臨床的重要度×6 max30">臨床<br><span style="font-weight:400;font-size:10px">/30</span></th>
+        <th>総合</th><th>判定</th></tr></thead><tbody>`
+      + top.map((d, i) => {
+        const scoreColor = d.totalScore >= 60 ? 'var(--danger)' : d.totalScore >= 40 ? 'var(--warning)' : 'var(--success)';
+        const ageTxt = d.ageYears !== null ? d.ageYears.toFixed(1) + '年' : '-';
+        return `<tr style="${d.earlyReplace||d.isOverEol?'background:#fef2f2':''}">
+          <td style="font-weight:700;color:${i<3?'var(--danger)':'var(--gray-500)'}">${i+1}</td>
+          <td class="eq-id">${d.eq.id}</td>
+          <td>${(d.eq.name||'').substring(0,20)}</td>
+          <td><span style="font-size:10px">${d.eq.managedByDept||'-'}</span></td>
+          <td>${ageTxt}</td>
+          <td>${d.usefulLife}年</td>
+          <td style="text-align:center"><span style="font-weight:700;color:${d.freqScore>=20?'var(--danger)':'inherit'}">${d.freqScore.toFixed(0)}</span></td>
+          <td style="text-align:center"><span style="font-weight:700;color:${d.costScore>=25?'var(--danger)':'inherit'}">${d.costScore.toFixed(0)}</span></td>
+          <td style="text-align:center"><span style="font-weight:700;color:${d.clinicalScore>=24?'var(--danger)':'inherit'}">${d.clinicalScore.toFixed(0)}</span></td>
+          <td style="text-align:center;font-size:18px;font-weight:700;color:${scoreColor}">${d.totalScore.toFixed(0)}</td>
+          <td><span class="badge" style="background:${d.recommendColor};color:#fff;font-size:10px;white-space:nowrap">${d.recommendation}</span>
+            ${d.earlyReplace?'<div style="font-size:10px;color:var(--danger);margin-top:2px">修理費率'+d.repairCostRatio.toFixed(0)+'%</div>':''}</td>
+        </tr>`;
+      }).join('')
+      + '</tbody></table>';
+
+  // 保守契約更新アラート
+  const alertDate = new Date();
+  alertDate.setMonth(alertDate.getMonth() + 3);
+  const alertDateStr = alertDate.toISOString().slice(0,10);
+  const todayStr = new Date().toISOString().slice(0,10);
+  const maintAlerts = allEquipment.filter(eq => {
+    if (!eq.maintenanceEndDate) return false;
+    if (deptFilter && eq.managedByDept !== deptFilter) return false;
+    return eq.maintenanceEndDate <= alertDateStr && eq.maintenanceEndDate >= todayStr;
+  }).sort((a,b) => (a.maintenanceEndDate||'').localeCompare(b.maintenanceEndDate||''));
+  const expiredMaint = allEquipment.filter(eq => {
+    if (!eq.maintenanceEndDate) return false;
+    if (deptFilter && eq.managedByDept !== deptFilter) return false;
+    return eq.maintenanceEndDate < todayStr;
+  });
+
+  document.getElementById('lcMaintenanceAlerts').innerHTML =
+    (maintAlerts.length === 0 && expiredMaint.length === 0)
+    ? '<p style="color:var(--success);text-align:center">&#10004; 3ヶ月以内に期限切れの保守契約はありません</p>'
+    : `${expiredMaint.length > 0 ? '<div style="background:#fee2e2;border-radius:8px;padding:10px 16px;margin-bottom:12px;font-weight:600;color:var(--danger)">&#9888; 期限切れ: '+expiredMaint.length+'件</div>' : ''}
+      <table class="eq-table"><thead><tr><th>機器ID</th><th>機器名</th><th>部門</th><th>契約形態</th><th>契約終了日</th><th>残日数</th><th>年間保守費</th></tr></thead><tbody>`
+      + [...expiredMaint.map(eq => ({eq, expired: true})), ...maintAlerts.map(eq => ({eq, expired: false}))].map(({eq, expired}) => {
+        const endDate = new Date(eq.maintenanceEndDate);
+        const daysLeft = Math.ceil((endDate - new Date()) / (24*60*60*1000));
+        const annCost = parseFloat(String(eq.annualMaintenanceCost||'').replace(/,/g,'')) || 0;
+        return `<tr style="${expired?'background:#fee2e2':daysLeft<=30?'background:#fef3c7':''}">
+          <td class="eq-id">${eq.id}</td><td>${eq.name||'-'}</td>
+          <td>${eq.managedByDept||'-'}</td><td>${eq.maintenanceType||'-'}</td>
+          <td style="font-weight:600;color:${expired?'var(--danger)':'var(--warning)'}">${eq.maintenanceEndDate}</td>
+          <td style="font-weight:700;color:${expired?'var(--danger)':daysLeft<=30?'var(--warning)':'inherit'}">${expired?'期限切れ':daysLeft+'日'}</td>
+          <td>${annCost>0?annCost.toLocaleString()+'円':'-'}</td></tr>`;
+      }).join('')
+      + '</tbody></table>';
+}
+
+function saveNotifySettings() {
+  localStorage.setItem('ME_SLACK_WEBHOOK', document.getElementById('lcSlackWebhook').value.trim());
+  localStorage.setItem('ME_NOTIFY_EMAIL', document.getElementById('lcNotifyEmail').value.trim());
+  showToast('通知設定を保存しました', 'success');
+  document.getElementById('lcNotifySettings').style.display = 'none';
+}
+
+async function checkMaintenanceNotifications() {
+  // 通知設定パネルの表示トグル
+  const panel = document.getElementById('lcNotifySettings');
+  panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+
+  const slackUrl = localStorage.getItem('ME_SLACK_WEBHOOK');
+  const notifyEmail = localStorage.getItem('ME_NOTIFY_EMAIL');
+
+  // 3ヶ月以内の期限切れ
+  const alertDate = new Date();
+  alertDate.setMonth(alertDate.getMonth() + 3);
+  const todayStr = new Date().toISOString().slice(0,10);
+  const alerts = allEquipment.filter(eq =>
+    eq.maintenanceEndDate && eq.maintenanceEndDate <= alertDate.toISOString().slice(0,10) && eq.maintenanceEndDate >= todayStr
+  );
+
+  if (alerts.length === 0) { showToast('通知対象の保守契約はありません', 'info'); return; }
+
+  const message = `【ME機器管理システム】保守契約更新アラート\n${alerts.length}件の保守契約が3ヶ月以内に期限を迎えます:\n\n` +
+    alerts.map(eq => {
+      const days = Math.ceil((new Date(eq.maintenanceEndDate) - new Date()) / (24*60*60*1000));
+      return `- ${eq.id} ${eq.name} (${eq.managedByDept||'-'}) : ${eq.maintenanceEndDate} (残${days}日) [${eq.maintenanceType||'-'}]`;
+    }).join('\n');
+
+  // Slack通知
+  if (slackUrl) {
+    try {
+      await fetch(slackUrl, {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ text: message })
+      });
+      showToast(`Slack通知を送信しました (${alerts.length}件)`, 'success');
+    } catch(e) {
+      showToast('Slack通知に失敗しました: ' + e.message, 'error');
+    }
+  }
+
+  // メール通知 (GAS経由)
+  if (notifyEmail && syncEnabled) {
+    try {
+      await gasPost('sendNotification', { email: notifyEmail, subject: '保守契約更新アラート', body: message });
+      showToast(`メール通知を送信しました`, 'success');
+    } catch(e) {
+      showToast('メール通知に失敗しました (GASにsendNotificationハンドラが必要)', 'error');
+    }
+  }
+
+  if (!slackUrl && !notifyEmail) {
+    showToast('通知先を設定してください（Slack Webhook URL またはメールアドレス）', 'info');
+  }
+}
+
+function exportLifecycleCSV() {
+  const repairs = [];
+  const tx = db.transaction('repairs', 'readonly');
+  const store = tx.objectStore('repairs');
+  const req = store.getAll();
+  req.onsuccess = () => {
+    const repairData = req.result;
+    const deptFilter = document.getElementById('lcDeptFilter')?.value || '';
+    let targets = allEquipment.filter(e => isEquipmentActive(e));
+    if (deptFilter) targets = targets.filter(e => e.managedByDept === deptFilter);
+
+    const lcData = targets.map(eq => calcLifecycleData(eq, repairData)).filter(d => d.deliveryDate);
+    lcData.sort((a, b) => b.totalScore - a.totalScore);
+
+    const headers = ['優先順位','機器ID','機器名','部門','管理部署','型式','製造元',
+      '購入価格','納入日','経過年数','耐用年数','残存年数',
+      '累計修理費','修理費率(%)','年間保守費','維持費率(%)',
+      '故障回数','故障スコア(/30)','コストスコア(/40)','臨床スコア(/30)','総合スコア(/100)',
+      '判定','保守契約形態','保守契約終了日'];
+    const rows = lcData.map((d, i) => [
+      i+1, d.eq.id, d.eq.name, d.eq.managedByDept||'', d.eq.dept||'', d.eq.model||'', d.eq.manufacturer||'',
+      d.purchasePrice, d.eq.deliveryDate||'', d.ageYears?d.ageYears.toFixed(1):'', d.usefulLife,
+      d.remainingYears?d.remainingYears.toFixed(1):'',
+      d.totalRepairCost, d.repairCostRatio.toFixed(1), d.annualMaint,
+      d.purchasePrice>0&&d.annualMaint>0?(d.annualMaint/d.purchasePrice*100).toFixed(1):'',
+      d.repairCount, d.freqScore.toFixed(0), d.costScore.toFixed(0), d.clinicalScore.toFixed(0), d.totalScore.toFixed(0),
+      d.recommendation, d.eq.maintenanceType||'', d.eq.maintenanceEndDate||''
+    ].map(v => `"${String(v||'').replace(/"/g,'""')}"`).join(','));
+
+    const csv = '\uFEFF' + headers.join(',') + '\n' + rows.join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `ライフサイクルレポート_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    showToast('レポートをダウンロードしました', 'success');
+  };
 }
 
 // ===================== DASHBOARD =====================
@@ -6068,7 +7048,8 @@ function startQrScan(target) {
     order: '&#129505; バーコード スキャン（発注）',
     inventory: '&#129505; バーコード スキャン（入出庫）',
     itemSearch: '&#129505; バーコード スキャン（物品検索）',
-    itemJan: '&#129505; バーコード スキャン（物品マスター）'
+    itemJan: '&#129505; バーコード スキャン（物品マスター）',
+    quickRepair: '&#128247; QRコード スキャン（修理依頼）'
   };
   document.getElementById('qrScanTitle').innerHTML = titles[target] || 'スキャン';
 
@@ -6456,6 +7437,9 @@ function onQrScanned(text) {
     const scanInput = document.getElementById('editItemScanCode');
     if (janInput) { janInput.value = jan || text; editItemJanParse(janInput); }
     if (scanInput) scanInput.value = text;
+  } else if (qrTarget === 'quickRepair') {
+    document.getElementById('qrepBarcodeInput').value = cleanScannedId(text);
+    lookupQuickRepairEq();
   }
 }
 
@@ -6572,6 +7556,7 @@ function initMasterEquipment() {
 function filterMasterEquipment() {
   const search = (document.getElementById('meqSearch').value || '').toLowerCase();
   const cat = document.getElementById('meqCatFilter').value;
+  const deptFilter = document.getElementById('meqDeptFilter')?.value || '';
 
   let filtered = allEquipment.filter(eq => {
     // View mode filter
@@ -6581,6 +7566,9 @@ function filterMasterEquipment() {
         !(eq.name||'').toLowerCase().includes(search) &&
         !(eq.model||'').toLowerCase().includes(search)) return false;
     if (cat && eq.category !== cat) return false;
+    // Department filter
+    if (deptFilter === '__unset__' && eq.managedByDept) return false;
+    if (deptFilter && deptFilter !== '__unset__' && eq.managedByDept !== deptFilter) return false;
     return true;
   });
 
@@ -6609,6 +7597,7 @@ function filterMasterEquipment() {
       <td>${eq.model||''}</td>
       <td>${eq.serial||''}</td>
       <td>${eq.dept||''}</td>
+      <td>${eq.managedByDept ? '<span class="badge" style="background:' + ({ME:'#dbeafe',放射線:'#fef3c7',検査:'#d1fae5',リハビリ:'#ede9fe',共用:'var(--gray-100)'}[eq.managedByDept]||'var(--gray-100)') + ';color:' + ({ME:'#1e40af',放射線:'#92400e',検査:'#065f46',リハビリ:'#5b21b6',共用:'var(--gray-600)'}[eq.managedByDept]||'var(--gray-600)') + ';font-size:10px">' + eq.managedByDept + '</span>' : '<span style="font-size:10px;color:var(--gray-400)">未設定</span>'}</td>
       <td>${(eq.manufacturer||'').substring(0,12)}</td>
       <td>${(eq.dealer||'').substring(0,12)}</td>
       <td>${eq.storage||''}</td>
@@ -6618,6 +7607,8 @@ function filterMasterEquipment() {
       <td><span style="font-size:11px">${eq.assetType||''}</span></td>
       <td>${eq.channel||''}</td>
       <td style="font-size:11px;white-space:nowrap">${eq.deliveryDate||''}</td>
+      <td style="font-size:11px;white-space:nowrap">${eq.maintenanceType||'<span style="color:var(--gray-400)">-</span>'}</td>
+      <td>${maintenanceRatioBadge(calcMaintenanceRatio(eq))}</td>
       <td style="white-space:nowrap">
         <button class="btn btn-sm btn-outline" onclick="showEquipmentEditModal('${eq.id}')">&#9998; 編集</button>
         <button class="btn btn-sm btn-danger" onclick="deleteEquipment('${eq.id}')" style="margin-left:4px">&#128465;</button>
@@ -6729,6 +7720,47 @@ function showEquipmentEditModal(eqId) {
         </select>
       </div>
 
+      <!-- 管理部門・保守契約詳細 -->
+      <div style="grid-column:1/-1;font-size:13px;font-weight:700;color:var(--primary);border-bottom:2px solid var(--primary-light);padding-bottom:4px;margin-top:8px;margin-bottom:2px">管理部門・保守契約詳細</div>
+      <div class="form-group">
+        <label class="form-label">管理部門 <span style="color:var(--danger)">*</span></label>
+        <select class="form-select" id="editEqManagedByDept">
+          <option value="" ${!eq||!eq.managedByDept?'selected':''}>選択...</option>
+          <option value="ME" ${eq&&eq.managedByDept==='ME'?'selected':''}>ME</option>
+          <option value="放射線" ${eq&&eq.managedByDept==='放射線'?'selected':''}>放射線</option>
+          <option value="検査" ${eq&&eq.managedByDept==='検査'?'selected':''}>検査</option>
+          <option value="リハビリ" ${eq&&eq.managedByDept==='リハビリ'?'selected':''}>リハビリ</option>
+          <option value="共用" ${eq&&eq.managedByDept==='共用'?'selected':''}>共用</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">保守契約形態 <span style="color:var(--danger)">*</span></label>
+        <select class="form-select" id="editEqMaintenanceType">
+          <option value="" ${!eq||!eq.maintenanceType?'selected':''}>選択...</option>
+          <option value="フルメンテ" ${eq&&eq.maintenanceType==='フルメンテ'?'selected':''}>フルメンテ</option>
+          <option value="センドバック" ${eq&&eq.maintenanceType==='センドバック'?'selected':''}>センドバック</option>
+          <option value="点検のみ" ${eq&&eq.maintenanceType==='点検のみ'?'selected':''}>点検のみ</option>
+          <option value="スポット" ${eq&&eq.maintenanceType==='スポット'?'selected':''}>スポット</option>
+          <option value="なし" ${eq&&eq.maintenanceType==='なし'?'selected':''}>なし</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">年間保守費 (円)</label>
+        <input type="text" class="form-input" id="editEqAnnualMaintCost" value="${v('annualMaintenanceCost')}" placeholder="例: 500,000">
+      </div>
+      <div class="form-group">
+        <label class="form-label">保守契約開始日</label>
+        <input type="date" class="form-input" id="editEqMaintStart" value="${v('maintenanceStartDate')}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">保守契約終了日</label>
+        <input type="date" class="form-input" id="editEqMaintEnd" value="${v('maintenanceEndDate')}">
+      </div>
+      <div class="form-group" id="editEqRatioDisplay" style="display:flex;align-items:center;gap:8px">
+        <label class="form-label" style="margin-bottom:0">維持費率</label>
+        <span id="editEqRatioValue" style="font-size:16px;font-weight:700">${(() => { const r = eq ? calcMaintenanceRatio(eq) : null; return r !== null ? maintenanceRatioBadge(r) : '<span style="color:var(--gray-400)">-</span>'; })()}</span>
+      </div>
+
       <!-- ステータス・廃棄 -->
       <div style="grid-column:1/-1;font-size:13px;font-weight:700;color:var(--primary);border-bottom:2px solid var(--primary-light);padding-bottom:4px;margin-top:8px;margin-bottom:2px">ステータス</div>
       <div class="form-group">
@@ -6788,6 +7820,12 @@ async function saveEquipment(isNew) {
   const name = document.getElementById('editEqName').value.trim();
   if (!name) { showToast('機器名を入力してください', 'error'); return; }
 
+  const managedByDept = document.getElementById('editEqManagedByDept').value;
+  if (!managedByDept) { showToast('管理部門を選択してください', 'error'); return; }
+
+  const maintenanceType = document.getElementById('editEqMaintenanceType').value;
+  if (!maintenanceType) { showToast('保守契約形態を選択してください', 'error'); return; }
+
   if (isNew && allEquipment.find(e => e.id === id)) {
     showToast('この機器IDは既に登録されています', 'error'); return;
   }
@@ -6815,6 +7853,11 @@ async function saveEquipment(isNew) {
     rentalStartDate: document.getElementById('editEqRentalStart').value,
     rentalEndDate: document.getElementById('editEqRentalEnd').value,
     maintenanceContract: document.getElementById('editEqMaintenance').value,
+    managedByDept: managedByDept,
+    maintenanceType: maintenanceType,
+    annualMaintenanceCost: document.getElementById('editEqAnnualMaintCost').value.trim(),
+    maintenanceStartDate: document.getElementById('editEqMaintStart').value,
+    maintenanceEndDate: document.getElementById('editEqMaintEnd').value,
     discardDate: document.getElementById('editEqDiscardDate').value,
     discardReason: document.getElementById('editEqDiscardReason').value.trim(),
     documentUrl: document.getElementById('editEqDocUrl').value.trim(),
@@ -6824,6 +7867,12 @@ async function saveEquipment(isNew) {
     location: (status === '貸出中') ? (existing.location || '') : (document.getElementById('editEqStorage').value.trim() || 'ME室'),
     discard: (status === '廃棄' || status === '廃棄待ち') ? status : ''
   };
+
+  // 維持費率チェック
+  const ratio = calcMaintenanceRatio(eqData);
+  if (ratio !== null && ratio >= 25) {
+    if (!confirm(`維持費率が ${ratio.toFixed(1)}% と非常に高い値です。\n入力内容に間違いはありませんか？\n\nそのまま保存しますか？`)) return;
+  }
 
   await dbPut('equipment', eqData);
 
@@ -6859,13 +7908,19 @@ async function deleteEquipment(eqId) {
 function exportEquipmentCSV() {
   const headers = ['機器ID','機器区分','機器名','型式','製造番号','管理部署','製造元','代理店',
     '保管場所','ステータス','貸出状態','現在地','資産区分','CH','納入日','購入価格',
-    '代替レンタルデモ開始日','代替レンタルデモ終了日','保守契約','廃棄','廃棄日','廃棄理由','添付文書URL','備考'];
-  const rows = allEquipment.map(eq => [
-    eq.id, eq.category, eq.name, eq.model, eq.serial, eq.dept, eq.manufacturer, eq.dealer,
-    eq.storage, eq.status, eq.lending, eq.location, eq.assetType, eq.channel,
-    eq.deliveryDate, eq.purchasePrice, eq.rentalStartDate, eq.rentalEndDate,
-    eq.maintenanceContract, eq.discard, eq.discardDate, eq.discardReason, eq.documentUrl, eq.notes
-  ].map(v => `"${(v||'').replace(/"/g,'""')}"`).join(','));
+    '代替レンタルデモ開始日','代替レンタルデモ終了日','保守契約','廃棄','廃棄日','廃棄理由','添付文書URL','備考',
+    '管理部門','保守契約形態','年間保守費','保守契約開始日','保守契約終了日','維持費率(%)'];
+  const rows = allEquipment.map(eq => {
+    const ratio = calcMaintenanceRatio(eq);
+    return [
+      eq.id, eq.category, eq.name, eq.model, eq.serial, eq.dept, eq.manufacturer, eq.dealer,
+      eq.storage, eq.status, eq.lending, eq.location, eq.assetType, eq.channel,
+      eq.deliveryDate, eq.purchasePrice, eq.rentalStartDate, eq.rentalEndDate,
+      eq.maintenanceContract, eq.discard, eq.discardDate, eq.discardReason, eq.documentUrl, eq.notes,
+      eq.managedByDept, eq.maintenanceType, eq.annualMaintenanceCost, eq.maintenanceStartDate, eq.maintenanceEndDate,
+      ratio !== null ? ratio.toFixed(1) : ''
+    ].map(v => `"${(v||'').replace(/"/g,'""')}"`).join(',');
+  });
 
   const csv = '\uFEFF' + headers.join(',') + '\n' + rows.join('\n');
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
@@ -7610,13 +8665,22 @@ async function deleteItem(itemId) {
   showToast('物品を削除しました', 'success');
 }
 
-function showItemDetailModal(itemId) {
+async function showItemDetailModal(itemId) {
   const it = allItems.find(i => i.itemId === itemId);
   if (!it) { showToast('物品が見つかりません', 'error'); return; }
 
   const partBadge = it.isReplacementPart === 'TRUE'
     ? '<span class="badge badge-repair" style="font-size:13px;padding:5px 12px"><span class="badge-dot"></span>交換パーツ</span>'
     : '';
+
+  const currentStock = await getCurrentStock(it.itemId);
+  const parLevel = parseInt(it.parLevel) || 0;
+  const reorderPoint = parseInt(it.reorderPoint) || 0;
+  const isLow = reorderPoint > 0 && currentStock <= reorderPoint;
+  const isNeg = currentStock < 0;
+  const stockColor = isNeg ? 'var(--danger)' : isLow ? '#d97706' : 'var(--success)';
+  const stockBg = isNeg ? '#fee2e2' : isLow ? '#fef3c7' : '#d1fae5';
+  const stockLabel = isNeg ? '⚠ マイナス在庫' : isLow ? '⚠ 要発注' : '正常';
 
   document.getElementById('modal').style.maxWidth = '720px';
   document.getElementById('modalTitle').textContent = '物品詳細';
@@ -7627,6 +8691,16 @@ function showItemDetailModal(itemId) {
         <div style="font-size:13px;color:var(--gray-400);margin-top:2px">ID: ${it.itemId} ${partBadge}</div>
       </div>
       <span class="badge" style="background:var(--gray-100);color:var(--gray-600);font-size:12px;padding:6px 12px">${it.category || '-'}</span>
+    </div>
+    <div style="background:${stockBg};border-radius:10px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between">
+      <div>
+        <div style="font-size:12px;font-weight:600;color:${stockColor}">現在の在庫数</div>
+        <div style="font-size:28px;font-weight:700;color:${stockColor}">${currentStock}<span style="font-size:14px;font-weight:400;margin-left:4px">${it.orderUnit || '個'}</span></div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:11px;color:var(--gray-500)">定数: ${parLevel || '-'} / 発注点: ${reorderPoint || '-'}</div>
+        <div style="font-size:12px;font-weight:600;color:${stockColor};margin-top:2px">${stockLabel}</div>
+      </div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid var(--gray-200);border-radius:10px;overflow:hidden">
       ${detailRow('JANコード', '<span style="font-family:monospace;letter-spacing:1px">' + (it.janCode || '-') + '</span>', true)}
@@ -7738,6 +8812,7 @@ async function showInventoryModal(type, prefillItem) {
         ${itemOptsHtml}
       </select>
       <div id="invItemInfo" style="display:none;margin-top:6px;padding:8px 12px;background:var(--gray-50);border-radius:6px;font-size:12px"></div>
+      <div id="invStockInfo" style="display:none;margin-top:6px;padding:10px 14px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;font-size:13px"></div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
       <div class="form-group">
@@ -7775,16 +8850,29 @@ async function showInventoryModal(type, prefillItem) {
   if (prefillItem) onInvItemChange();
 }
 
-function onInvItemChange() {
+async function onInvItemChange() {
   const sel = document.getElementById('invItemSelect');
   const info = document.getElementById('invItemInfo');
+  const stockInfo = document.getElementById('invStockInfo');
   const opt = sel.options[sel.selectedIndex];
   if (opt && opt.value) {
     info.style.display = 'block';
     info.innerHTML = `JANコード: <strong>${opt.dataset.jan || '-'}</strong> | 単価: <strong>${opt.dataset.price ? Number(opt.dataset.price).toLocaleString() + '円' : '-'}</strong>`;
     document.getElementById('invUnitLabel').textContent = opt.dataset.unit || '個';
+    // Show current stock
+    const stock = await getCurrentStock(opt.value);
+    const item = allItems.find(i => i.itemId === opt.value);
+    const unit = opt.dataset.unit || '個';
+    const reorderPoint = parseInt(item?.reorderPoint) || 0;
+    const isLow = reorderPoint > 0 && stock <= reorderPoint;
+    const isNeg = stock < 0;
+    const color = isNeg ? 'var(--danger)' : isLow ? '#d97706' : 'var(--primary)';
+    stockInfo.style.display = 'block';
+    stockInfo.innerHTML = `📦 現在の在庫数: <strong style="font-size:18px;color:${color};margin:0 4px">${stock}</strong>${unit}`
+      + (isNeg ? ' <span style="color:var(--danger);font-weight:600">（マイナス在庫）</span>' : isLow ? ' <span style="color:#d97706;font-weight:600">（発注点以下）</span>' : '');
   } else {
     info.style.display = 'none';
+    if (stockInfo) stockInfo.style.display = 'none';
   }
 }
 
@@ -7849,8 +8937,8 @@ async function filterInventoryLog() {
   filtered.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 
   // Stats
-  const totalIn = filtered.filter(l => l.type === '入庫').reduce((s, l) => s + (l.quantity || 0), 0);
-  const totalOut = filtered.filter(l => l.type === '出庫').reduce((s, l) => s + (l.quantity || 0), 0);
+  const totalIn = filtered.filter(l => l.type === '入庫').reduce((s, l) => s + (parseInt(l.quantity) || 0), 0);
+  const totalOut = filtered.filter(l => l.type === '出庫').reduce((s, l) => s + (parseInt(l.quantity) || 0), 0);
   document.getElementById('invStats').innerHTML = `
     <div class="stat-card blue"><div class="stat-label">総件数</div><div class="stat-value">${filtered.length}</div></div>
     <div class="stat-card green"><div class="stat-label">入庫数</div><div class="stat-value">${totalIn}</div></div>
@@ -7886,6 +8974,19 @@ async function filterInventoryLog() {
   if (invTab === 'stock') renderStockTable();
 }
 
+async function getCurrentStock(itemId) {
+  const logs = await dbGetAll('inventoryLog');
+  let inQty = 0, outQty = 0;
+  logs.forEach(l => {
+    if (l.itemId === itemId) {
+      const q = parseInt(l.quantity) || 0;
+      if (l.type === '入庫') inQty += q;
+      else outQty += q;
+    }
+  });
+  return inQty - outQty;
+}
+
 async function renderStockTable() {
   const logs = await dbGetAll('inventoryLog');
   // Calculate stock per item
@@ -7893,8 +8994,9 @@ async function renderStockTable() {
   logs.forEach(l => {
     const key = l.itemId;
     if (!stockMap[key]) stockMap[key] = { inQty: 0, outQty: 0 };
-    if (l.type === '入庫') stockMap[key].inQty += (l.quantity || 0);
-    else stockMap[key].outQty += (l.quantity || 0);
+    const q = parseInt(l.quantity) || 0;
+    if (l.type === '入庫') stockMap[key].inQty += q;
+    else stockMap[key].outQty += q;
   });
 
   // Merge with items master
