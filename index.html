@@ -296,6 +296,9 @@ a{color:var(--primary);text-decoration:none}
     <div class="nav-item" data-screen="inspection-schedule" onclick="showScreen('inspection-schedule')">
       <span class="icon">&#128197;</span>年間点検予定表
     </div>
+    <div class="nav-item" data-screen="durability-overdue" onclick="showScreen('durability-overdue')">
+      <span class="icon">&#9888;</span>耐久超過リスト
+    </div>
     <div class="nav-item" data-screen="repair" onclick="showScreen('repair')">
       <span class="icon">&#128736;</span>修理記録
     </div>
@@ -790,6 +793,11 @@ a{color:var(--primary);text-decoration:none}
       </div>
     </div>
 
+    <!-- ========== 耐久超過リスト画面 ========== -->
+    <div class="screen" id="screen-durability-overdue">
+      <div id="durabilityOverdueContent" style="padding:4px 0"></div>
+    </div>
+
     <!-- ========== 稼働率分析画面 ========== -->
     <div class="screen" id="screen-utilization">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">
@@ -1265,6 +1273,27 @@ a{color:var(--primary);text-decoration:none}
 
 <!-- Toast Container -->
 <div class="toast-container" id="toastContainer"></div>
+
+<!-- スポット点検ポップアップ -->
+<div id="spotInspPopupOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9000;display:none;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:16px;box-shadow:0 8px 40px rgba(0,0,0,0.25);max-width:680px;width:95%;max-height:85vh;display:flex;flex-direction:column;overflow:hidden">
+    <div style="background:linear-gradient(135deg,#d97706,#f59e0b);padding:16px 20px;display:flex;align-items:center;justify-content:space-between">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-size:24px">&#128276;</span>
+        <div>
+          <div style="font-size:16px;font-weight:700;color:#fff">スポット点検・保守の予定があります</div>
+          <div style="font-size:12px;color:rgba(255,255,255,0.85)" id="spotInspPopupSubtitle"></div>
+        </div>
+      </div>
+      <button onclick="closeSpotInspPopup()" style="background:rgba(255,255,255,0.2);border:none;border-radius:8px;color:#fff;font-size:18px;cursor:pointer;width:32px;height:32px;display:flex;align-items:center;justify-content:center">&times;</button>
+    </div>
+    <div style="overflow-y:auto;padding:16px 20px;flex:1" id="spotInspPopupBody"></div>
+    <div style="padding:12px 20px;border-top:1px solid #f0f0f0;display:flex;justify-content:flex-end;gap:8px">
+      <button onclick="closeSpotInspPopupForToday()" style="background:#f3f4f6;border:1px solid #d1d5db;border-radius:8px;padding:8px 16px;font-size:13px;cursor:pointer;color:#374151">今日は表示しない</button>
+      <button onclick="closeSpotInspPopup()" style="background:#d97706;border:none;border-radius:8px;padding:8px 20px;font-size:13px;cursor:pointer;color:#fff;font-weight:600">確認しました</button>
+    </div>
+  </div>
+</div>
 
 <!-- External Libraries: Quagga2 (バーコード読取), html5-qrcode (QRコード読取) -->
 <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.8.4/dist/quagga.min.js"></script>
@@ -1927,7 +1956,8 @@ function getEquipmentFieldMap() {
     '添付文書URL': 'documentUrl', '備考': 'notes',
     '管理部門': 'managedByDept', '保守契約形態': 'maintenanceType',
     '年間保守費': 'annualMaintenanceCost', '保守契約開始日': 'maintenanceStartDate', '保守契約終了日': 'maintenanceEndDate',
-    '初回点検月': 'firstInspectionMonth',
+    '初回点検月': 'firstInspectionMonth', '耐久年数': 'durabilityYears',
+    'スポット点検予定日': 'nextSpotInspDate', 'スポット点検備考': 'nextSpotInspNote',
   };
 }
 
@@ -2013,7 +2043,7 @@ function handleGetEquipment() {
   const sheetName = SHEET_NAMES.equipment;
   const sheet = getOrCreateSheet(sheetName);
   if (sheet.getLastRow() < 1) {
-    const defaultHeaders = ['機器ID','機器区分','機器名','型式','製造番号','管理部署','製造元','代理店','ステータス','貸出状態','現在地','保管場所','CH','資産区分','納入日','購入価格','代替レンタルデモ開始日','代替レンタルデモ終了日','保守契約','廃棄','廃棄日','廃棄理由','添付文書URL','備考','管理部門','保守契約形態','年間保守費','保守契約開始日','保守契約終了日','初回点検月'];
+    const defaultHeaders = ['機器ID','機器区分','機器名','型式','製造番号','管理部署','製造元','代理店','ステータス','貸出状態','現在地','保管場所','CH','資産区分','納入日','購入価格','代替レンタルデモ開始日','代替レンタルデモ終了日','保守契約','廃棄','廃棄日','廃棄理由','添付文書URL','備考','管理部門','保守契約形態','年間保守費','保守契約開始日','保守契約終了日','初回点検月','耐久年数','スポット点検予定日','スポット点検備考'];
     sheet.getRange(1, 1, 1, defaultHeaders.length).setValues([defaultHeaders]);
     return { success: true, data: [], headers: defaultHeaders };
   }
@@ -2687,7 +2717,8 @@ const SHEET_TO_APP_MAP = {
   '添付文書URL': 'documentUrl', '備考': 'notes',
   '管理部門': 'managedByDept', '保守契約形態': 'maintenanceType',
   '年間保守費': 'annualMaintenanceCost', '保守契約開始日': 'maintenanceStartDate', '保守契約終了日': 'maintenanceEndDate',
-  '初回点検月': 'firstInspectionMonth'
+  '初回点検月': 'firstInspectionMonth', '耐久年数': 'durabilityYears',
+  'スポット点検予定日': 'nextSpotInspDate', 'スポット点検備考': 'nextSpotInspNote'
 };
 
 // 維持費率算出
@@ -3560,6 +3591,8 @@ async function initApp() {
         // Refresh current view after sync
         renderAreaGrid();
         populateFilters();
+        // Sheets同期後にスポット点検ポップアップを再チェック（最新データで判定）
+        setTimeout(() => checkSpotInspectionPopup(), 500);
       }
     }).catch(() => { clearTimeout(syncLoadingTimer); syncLoadingEl.classList.remove('show'); });
     // Process any queued operations from previous offline sessions
@@ -3632,6 +3665,9 @@ async function initApp() {
   // Load screen from hash
   const hash = location.hash.replace('#', '');
   if (hash) showScreen(hash);
+
+  // スポット点検ポップアップ（起動時チェック、少し遅延して表示）
+  setTimeout(() => checkSpotInspectionPopup(), 1500);
 }
 
 async function populateStaffDropdown() {
@@ -3660,7 +3696,7 @@ function showScreen(name) {
 
   const titles = {
     lending: '貸出・返却', status: '貸出状況', equipment: '機器一覧（使用可能機器）',
-    inspection: '点検登録', 'inspection-schedule': '年間点検予定表', repair: '修理記録', 'quick-repair': '修理依頼(簡易)',
+    inspection: '点検登録', 'inspection-schedule': '年間点検予定表', 'durability-overdue': '耐久超過リスト', repair: '修理記録', 'quick-repair': '修理依頼(簡易)',
     'repair-dashboard': '修理分析', history: '貸出履歴', dashboard: 'ダッシュボード',
     utilization: '稼働率分析', lifecycle: 'ライフサイクル・アドバイザー',
     'master-equipment': '機器マスター管理', 'master-staff': 'スタッフ管理',
@@ -3697,6 +3733,7 @@ function showScreen(name) {
   else if (name === 'quick-repair') initPromise = initQuickRepair();
   else if (name === 'repair-dashboard') initPromise = renderRepairDashboard();
   else if (name === 'lifecycle') initPromise = renderLifecycle();
+  else if (name === 'durability-overdue') initPromise = renderDurabilityOverdue();
 
   if (initPromise && typeof initPromise.then === 'function') {
     loadingTimer = setTimeout(() => { loadingEl.classList.add('show'); }, 500);
@@ -4453,6 +4490,80 @@ async function filterHistory() {
 
   filtered.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
   displayHistory(filtered);
+}
+
+// ===================== INSPECTION MANUALS (点検マニュアル) =====================
+// キー: INSPECTION_TYPESのキー、またはモデル名（モデル名優先）
+// value: { title, url } の配列（複数マニュアル対応）
+const INSPECTION_MANUALS = {
+  infusionPump: [
+    { title: 'TE-281 輸液ポンプ 点検マニュアル', url: 'https://docs.google.com/document/d/1IgZf9CH5Kv3hotl1TFIHkGdeV8YdkWE1/preview' },
+    { title: '輸液ポンプ 点検マニュアル②', url: 'https://docs.google.com/document/d/1JrTnUYv0Q8TWSsMU1w1XrHZmiTOHQxvt/preview' }
+  ],
+  // 他機器のマニュアルはここに追加:
+  syringePump: [
+    { title: 'TE-331型 シリンジポンプ 点検マニュアル', url: 'https://docs.google.com/document/d/1qjk7DsbrY-ElAo7RGdWYzyFCSB-TZuBN/preview' },
+    { title: 'TE-351型 シリンジポンプ 点検マニュアル', url: 'https://docs.google.com/document/d/1zb3ndXLIl_b9j-5JkxU6IJEB-h-uDHfD/preview' },
+    { title: 'TE-381型 シリンジポンプ 点検マニュアル', url: 'https://docs.google.com/document/d/1YlGMuVOE1e2o-xyya7rUA_aNmovS7ECg/preview' }
+  ],
+  ventilator: [
+    { title: 'Hamilton C1 人工呼吸器 点検マニュアル', url: 'https://docs.google.com/document/d/1wXLIZgG6W-PtwX3dIPh-io-ljn04hmia/preview' }
+  ],
+  defibrillator: [
+    { title: 'TEC-5600シリーズ 除細動器 点検マニュアル', url: 'https://docs.google.com/document/d/10M-Tdmcw_M4MmB-kCOUBQtL2gBV781DrPFxqc8gcVfM/preview' },
+    { title: 'DFM100 除細動器 点検マニュアル', url: 'https://docs.google.com/document/d/1Vgbm_6QxCS3Rvg93vw_gXzxm1xN67BGG/preview' }
+  ],
+  iabp: [
+    { title: 'IABP 点検マニュアル', url: 'https://docs.google.com/document/d/1YS1fJ9w2i-2jhb_-kjjvv8Ol1PvBQeIY/preview' }
+  ],
+  suction: [
+    { title: '低圧持続吸引器 点検マニュアル', url: 'https://docs.google.com/document/d/1UGqP6Jm6sn-yU2rHBYoWCs4v0jhkXxF0/preview' }
+  ],
+  anesthesia: [
+    { title: '麻酔器 点検マニュアル', url: 'https://docs.google.com/document/d/1XrbqL-AuNCLoUkHWhTHZAdMP3Cax6hrX/preview' }
+  ],
+};
+
+// 機器タイプ・モデルからマニュアル一覧を取得
+function getInspManuals(typeKey, eq) {
+  const manuals = [];
+  // タイプ別マニュアル
+  if (INSPECTION_MANUALS[typeKey]) {
+    manuals.push(...INSPECTION_MANUALS[typeKey]);
+  }
+  return manuals;
+}
+
+// マニュアルビューアーを開く
+function openInspManual(url, title) {
+  const existing = document.getElementById('inspManualPanel');
+  if (existing) existing.remove();
+
+  const panel = document.createElement('div');
+  panel.id = 'inspManualPanel';
+  panel.innerHTML = `
+    <div style="position:fixed;top:0;right:0;width:min(560px,95vw);height:100vh;
+                background:#fff;box-shadow:-4px 0 24px rgba(0,0,0,.18);
+                z-index:9000;display:flex;flex-direction:column;transition:transform .3s">
+      <div style="display:flex;align-items:center;justify-content:space-between;
+                  padding:12px 16px;background:var(--primary);color:#fff;flex-shrink:0">
+        <div style="display:flex;align-items:center;gap:8px;min-width:0">
+          <span style="font-size:18px">&#128214;</span>
+          <span style="font-weight:700;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${title}</span>
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0">
+          <a href="${url.replace('/preview','')}" target="_blank"
+             style="background:rgba(255,255,255,.2);color:#fff;border:none;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:12px;text-decoration:none;display:inline-flex;align-items:center;gap:4px">
+            &#128279; 新しいタブで開く
+          </a>
+          <button onclick="document.getElementById('inspManualPanel').remove()"
+                  style="background:rgba(255,255,255,.2);color:#fff;border:none;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:14px">&#10005;</button>
+        </div>
+      </div>
+      <iframe src="${url}" style="flex:1;border:none;width:100%"
+              allow="autoplay" loading="lazy"></iframe>
+    </div>`;
+  document.body.appendChild(panel);
 }
 
 // ===================== INSPECTION SCHEDULE (年間点検予定表) =====================
@@ -5356,6 +5467,7 @@ function selectInspType(typeKey) {
   }).join('');
   panel.style.display = '';
   document.getElementById('inspFormPanel').style.display = 'none';
+  document.getElementById('inspTypeGrid').style.display = 'none'; // リスト表示中はグリッドを隠す
 }
 
 function pickInspEquipment(eqId, typeKey) {
@@ -5368,10 +5480,17 @@ function pickInspEquipment(eqId, typeKey) {
 
 function closeInspEqList() {
   document.getElementById('inspEqListPanel').style.display = 'none';
+  document.getElementById('inspTypeGrid').style.display = ''; // グリッドを再表示
 }
 
 function closeInspForm() {
   document.getElementById('inspFormPanel').style.display = 'none';
+  document.getElementById('inspTypeGrid').style.display = ''; // グリッドを再表示
+  document.getElementById('inspEqId').value = '';
+  document.getElementById('inspEqInfo').innerHTML = '';
+  // マニュアルパネルも閉じる
+  const manualPanel = document.getElementById('inspManualPanel');
+  if (manualPanel) manualPanel.remove();
   currentInspType = null;
   currentInspEqId = null;
 }
@@ -5482,10 +5601,44 @@ async function showInspectionForm(equipmentId, typeKey) {
   // Submit button
   html += `<button class="btn btn-success btn-lg" onclick="submitInspection()" style="width:100%">&#9989; 点検結果を登録</button>`;
 
-  document.getElementById('inspFormTitle').textContent = config.name + ' 点検';
+  // マニュアルボタンをヘッダーに設定
+  const manuals = getInspManuals(typeKey, eq);
+  const titleEl = document.getElementById('inspFormTitle');
+  titleEl.textContent = config.name + ' 点検';
+  // 既存のマニュアルボタンを削除
+  document.querySelectorAll('.insp-manual-btn').forEach(el => el.remove());
+  if (manuals.length > 0) {
+    const headerEl = titleEl.parentElement;
+    if (manuals.length === 1) {
+      const btn = document.createElement('button');
+      btn.className = 'btn btn-sm insp-manual-btn';
+      btn.style.cssText = 'background:#f0fdf4;color:#16a34a;border:1px solid #86efac;gap:4px;display:inline-flex;align-items:center';
+      btn.innerHTML = '&#128214; マニュアルを見る';
+      btn.onclick = () => openInspManual(manuals[0].url, manuals[0].title);
+      headerEl.insertBefore(btn, headerEl.querySelector('button'));
+    } else {
+      // 複数マニュアルの場合はドロップダウン
+      const wrap = document.createElement('div');
+      wrap.className = 'insp-manual-btn';
+      wrap.style.cssText = 'position:relative;display:inline-block';
+      wrap.innerHTML = `<button class="btn btn-sm" style="background:#f0fdf4;color:#16a34a;border:1px solid #86efac"
+        onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
+        &#128214; マニュアル &#9660;
+      </button>
+      <div style="display:none;position:absolute;right:0;top:100%;background:#fff;border:1px solid var(--gray-200);border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.1);min-width:220px;z-index:100">
+        ${manuals.map(m => `<div onclick="openInspManual('${m.url}','${m.title}');this.parentElement.style.display='none'"
+          style="padding:10px 14px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--gray-100)"
+          onmouseover="this.style.background='var(--gray-50)'" onmouseout="this.style.background=''">
+          &#128214; ${m.title}
+        </div>`).join('')}
+      </div>`;
+      headerEl.insertBefore(wrap, headerEl.querySelector('button'));
+    }
+  }
   document.getElementById('inspFormBody').innerHTML = html;
   document.getElementById('inspFormPanel').style.display = 'block';
   document.getElementById('inspEqListPanel').style.display = 'none';
+  document.getElementById('inspTypeGrid').style.display = 'none'; // フォーム表示中はグリッドを隠す
   // フォームまでスクロール
   setTimeout(() => {
     document.getElementById('inspFormPanel').scrollIntoView({behavior:'smooth', block:'start'});
@@ -6958,6 +7111,111 @@ function saveNotifySettings() {
   document.getElementById('lcNotifySettings').style.display = 'none';
 }
 
+// ===================== スポット点検ポップアップ =====================
+function checkSpotInspectionPopup() {
+  // 「今日は表示しない」が設定されている場合はスキップ
+  const suppressedDate = localStorage.getItem('ME_SPOT_INSP_SUPPRESS');
+  const todayStr = new Date().toISOString().slice(0, 10);
+  if (suppressedDate === todayStr) return;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const todayYM = today.getFullYear() * 100 + (today.getMonth() + 1); // 例: 202604
+
+  // 予定日が当月以前のものを抽出（過去・当月）
+  const due = allEquipment.filter(eq => {
+    if (!eq.nextSpotInspDate) return false;
+    const raw = String(eq.nextSpotInspDate).trim();
+    if (!raw) return false;
+    // 日付をパース
+    const m = raw.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+    if (!m) return false;
+    const eqYM = parseInt(m[1]) * 100 + parseInt(m[2]);
+    return eqYM <= todayYM;
+  });
+
+  if (due.length === 0) return;
+
+  // 超過・当月・将来1ヶ月以内に分類
+  const nextMonthYM = (() => {
+    const d = new Date(today);
+    d.setMonth(d.getMonth() + 1);
+    return d.getFullYear() * 100 + (d.getMonth() + 1);
+  })();
+
+  const overdue = [];
+  const thisMonth = [];
+  due.forEach(eq => {
+    const raw = String(eq.nextSpotInspDate).trim();
+    const m = raw.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+    if (!m) return;
+    const eqYM = parseInt(m[1]) * 100 + parseInt(m[2]);
+    if (eqYM < todayYM) overdue.push(eq);
+    else thisMonth.push(eq);
+  });
+
+  const formatDate = raw => {
+    const m = raw.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+    if (!m) return raw;
+    return `${m[1]}/${m[2].padStart(2,'0')}/${m[3].padStart(2,'0')}`;
+  };
+
+  const renderRow = (eq, isOverdue) => {
+    const dateStr = formatDate(String(eq.nextSpotInspDate || ''));
+    const color = isOverdue ? '#dc2626' : '#d97706';
+    const bg = isOverdue ? '#fef2f2' : '#fffbeb';
+    return `
+      <tr style="border-bottom:1px solid #f0f0f0;background:${bg}">
+        <td style="padding:8px 10px;font-weight:600;white-space:nowrap;color:${color}">${isOverdue ? '&#9888; 超過' : '&#128197; 当月'}</td>
+        <td style="padding:8px 10px;font-weight:600;white-space:nowrap">${eq.id || '—'}</td>
+        <td style="padding:8px 10px">${eq.name || '—'}</td>
+        <td style="padding:8px 10px;white-space:nowrap;color:${color};font-weight:${isOverdue?'700':'400'}">${dateStr}</td>
+        <td style="padding:8px 10px;font-size:12px;color:#6b7280">${eq.nextSpotInspNote || '—'}</td>
+        <td style="padding:8px 10px;font-size:12px;color:#6b7280">${eq.dept || eq.managedByDept || '—'}</td>
+      </tr>`;
+  };
+
+  const total = due.length;
+  document.getElementById('spotInspPopupSubtitle').textContent =
+    `${total}件（超過: ${overdue.length}件 / 当月: ${thisMonth.length}件）`;
+
+  document.getElementById('spotInspPopupBody').innerHTML = `
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead>
+          <tr style="background:#f9fafb;text-align:left;font-size:12px">
+            <th style="padding:8px 10px;white-space:nowrap">状態</th>
+            <th style="padding:8px 10px;white-space:nowrap">機器ID</th>
+            <th style="padding:8px 10px">機器名</th>
+            <th style="padding:8px 10px;white-space:nowrap">予定日</th>
+            <th style="padding:8px 10px">備考</th>
+            <th style="padding:8px 10px;white-space:nowrap">管理部署</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${overdue.map(eq => renderRow(eq, true)).join('')}
+          ${thisMonth.map(eq => renderRow(eq, false)).join('')}
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-top:12px;font-size:12px;color:#9ca3af">
+      &#8505; スポット点検完了後は、機器マスターで次回予定日を更新してください。
+    </p>`;
+
+  const overlay = document.getElementById('spotInspPopupOverlay');
+  overlay.style.display = 'flex';
+}
+
+function closeSpotInspPopup() {
+  document.getElementById('spotInspPopupOverlay').style.display = 'none';
+}
+
+function closeSpotInspPopupForToday() {
+  const todayStr = new Date().toISOString().slice(0, 10);
+  localStorage.setItem('ME_SPOT_INSP_SUPPRESS', todayStr);
+  closeSpotInspPopup();
+}
+
 async function checkMaintenanceNotifications() {
   // 通知設定パネルの表示トグル
   const panel = document.getElementById('lcNotifySettings');
@@ -7047,6 +7305,197 @@ function exportLifecycleCSV() {
     a.click();
     showToast('レポートをダウンロードしました', 'success');
   };
+}
+
+// ===================== 耐久超過リスト =====================
+async function renderDurabilityOverdue() {
+  const el = document.getElementById('durabilityOverdueContent');
+  el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--gray-400)">読み込み中...</div>';
+
+  if (!allEquipment || allEquipment.length === 0) {
+    allEquipment = await dbGetAll('equipment');
+  }
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  // Filter: active, non-rental, non-demo, non-DE, has durabilityYears
+  const candidates = allEquipment.filter(eq => {
+    const disc = (eq.discard || '').trim();
+    if (disc === '廃棄' || disc === '廃棄済み' || disc === '廃棄待ち') return false;
+    const st = (eq.status || '').trim();
+    if (st === '廃棄' || st === '廃棄済み') return false;
+    const asset = (eq.assetType || '').trim();
+    if (asset === 'レンタル' || asset === 'デモ' || asset === '代替') return false;
+    if ((eq.id || '').toUpperCase().startsWith('DE-')) return false;
+    const dur = parseInt(eq.durabilityYears);
+    if (!dur || dur <= 0) return false;
+    return true;
+  });
+
+  // Compute overdue items
+  const overdue = [];
+  const approaching = []; // within 1 year of expiry
+  candidates.forEach(eq => {
+    const dur = parseInt(eq.durabilityYears);
+    // Use deliveryDate or purchaseDate
+    const dateStr = eq.deliveryDate || eq.purchaseDate || '';
+    if (!dateStr) return;
+    const baseDate = new Date(dateStr);
+    if (isNaN(baseDate.getTime())) return;
+    const expiryDate = new Date(baseDate);
+    expiryDate.setFullYear(expiryDate.getFullYear() + dur);
+    const diffMs = today - expiryDate;
+    const diffYears = diffMs / (1000 * 60 * 60 * 24 * 365.25);
+    if (diffYears > 0) {
+      overdue.push({ eq, expiryDate, overdueYears: diffYears, baseDate });
+    } else if (diffYears > -1) {
+      approaching.push({ eq, expiryDate, overdueYears: diffYears, baseDate });
+    }
+  });
+
+  // Sort by most overdue first
+  overdue.sort((a, b) => b.overdueYears - a.overdueYears);
+  approaching.sort((a, b) => a.overdueYears - b.overdueYears);
+
+  // Group overdue by year tier
+  const groups = [
+    { label: '1年目', color: '#fef3c7', headerColor: '#d97706', textColor: '#92400e', items: [] },
+    { label: '2年目', color: '#fed7aa', headerColor: '#ea580c', textColor: '#7c2d12', items: [] },
+    { label: '3年目', color: '#fecaca', headerColor: '#dc2626', textColor: '#7f1d1d', items: [] },
+    { label: '4年目', color: '#f3a8a8', headerColor: '#b91c1c', textColor: '#7f1d1d', items: [] },
+    { label: '5年以上', color: '#e879f9', headerColor: '#9333ea', textColor: '#581c87', items: [] },
+  ];
+
+  overdue.forEach(item => {
+    const y = item.overdueYears;
+    if (y < 1) groups[0].items.push(item);
+    else if (y < 2) groups[1].items.push(item);
+    else if (y < 3) groups[2].items.push(item);
+    else if (y < 4) groups[3].items.push(item);
+    else groups[4].items.push(item);
+  });
+
+  const formatDate = d => {
+    if (!d || isNaN(d.getTime())) return '—';
+    return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
+  };
+
+  const renderTable = (items, bgColor) => {
+    if (items.length === 0) return '<p style="color:var(--gray-400);padding:8px 0;font-size:13px">該当なし</p>';
+    return `
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+          <thead>
+            <tr style="background:rgba(0,0,0,0.05);text-align:left">
+              <th style="padding:8px 10px;white-space:nowrap">機器ID</th>
+              <th style="padding:8px 10px">機器名</th>
+              <th style="padding:8px 10px;white-space:nowrap">型式</th>
+              <th style="padding:8px 10px;white-space:nowrap">納入日</th>
+              <th style="padding:8px 10px;white-space:nowrap">耐久年数</th>
+              <th style="padding:8px 10px;white-space:nowrap">耐久期限</th>
+              <th style="padding:8px 10px;white-space:nowrap">超過期間</th>
+              <th style="padding:8px 10px;white-space:nowrap">管理部署</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${items.map(({eq, expiryDate, overdueYears, baseDate}) => {
+              const yrs = Math.floor(overdueYears);
+              const mos = Math.floor((overdueYears - yrs) * 12);
+              const overdueTxt = yrs > 0 ? `${yrs}年${mos}ヶ月` : `${mos}ヶ月`;
+              return `<tr style="border-bottom:1px solid rgba(0,0,0,0.07)">
+                <td style="padding:8px 10px;font-weight:600;white-space:nowrap">${eq.id || '—'}</td>
+                <td style="padding:8px 10px">${eq.name || '—'}</td>
+                <td style="padding:8px 10px;color:var(--gray-500);white-space:nowrap">${eq.model || '—'}</td>
+                <td style="padding:8px 10px;white-space:nowrap">${formatDate(baseDate)}</td>
+                <td style="padding:8px 10px;text-align:center;white-space:nowrap">${eq.durabilityYears}年</td>
+                <td style="padding:8px 10px;white-space:nowrap">${formatDate(expiryDate)}</td>
+                <td style="padding:8px 10px;font-weight:600;color:#dc2626;white-space:nowrap">${overdueTxt}</td>
+                <td style="padding:8px 10px;color:var(--gray-500)">${eq.department || eq.manageDept || '—'}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  };
+
+  // Summary bar
+  const totalOverdue = overdue.length;
+  const summaryHtml = `
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">
+      ${groups.map(g => `
+        <div style="background:${g.color};border:1px solid ${g.headerColor};border-radius:8px;padding:10px 16px;min-width:100px;text-align:center">
+          <div style="font-size:11px;color:${g.textColor};font-weight:600">${g.label}</div>
+          <div style="font-size:24px;font-weight:700;color:${g.headerColor}">${g.items.length}</div>
+          <div style="font-size:11px;color:${g.textColor}">台</div>
+        </div>`).join('')}
+      <div style="background:#f0fdf4;border:1px solid #16a34a;border-radius:8px;padding:10px 16px;min-width:100px;text-align:center">
+        <div style="font-size:11px;color:#15803d;font-weight:600">合計超過</div>
+        <div style="font-size:24px;font-weight:700;color:#15803d">${totalOverdue}</div>
+        <div style="font-size:11px;color:#15803d">台</div>
+      </div>
+    </div>`;
+
+  // Approaching section
+  const approachingHtml = approaching.length > 0 ? `
+    <div class="card" style="margin-bottom:16px;border:1px solid #fbbf24">
+      <div class="card-header" style="background:#fffbeb">
+        <h3 style="color:#d97706">&#9203; 耐久期限まで1年以内（${approaching.length}台）</h3>
+      </div>
+      <div class="card-body" style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+          <thead>
+            <tr style="background:rgba(0,0,0,0.05);text-align:left">
+              <th style="padding:8px 10px;white-space:nowrap">機器ID</th>
+              <th style="padding:8px 10px">機器名</th>
+              <th style="padding:8px 10px;white-space:nowrap">型式</th>
+              <th style="padding:8px 10px;white-space:nowrap">納入日</th>
+              <th style="padding:8px 10px;white-space:nowrap">耐久年数</th>
+              <th style="padding:8px 10px;white-space:nowrap">耐久期限</th>
+              <th style="padding:8px 10px;white-space:nowrap">残り期間</th>
+              <th style="padding:8px 10px;white-space:nowrap">管理部署</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${approaching.map(({eq, expiryDate, overdueYears, baseDate}) => {
+              const remYears = Math.abs(overdueYears);
+              const mos = Math.floor(remYears * 12);
+              const remTxt = mos > 0 ? `あと${mos}ヶ月` : '今月期限';
+              return `<tr style="border-bottom:1px solid rgba(0,0,0,0.07)">
+                <td style="padding:8px 10px;font-weight:600;white-space:nowrap">${eq.id || '—'}</td>
+                <td style="padding:8px 10px">${eq.name || '—'}</td>
+                <td style="padding:8px 10px;color:var(--gray-500);white-space:nowrap">${eq.model || '—'}</td>
+                <td style="padding:8px 10px;white-space:nowrap">${formatDate(baseDate)}</td>
+                <td style="padding:8px 10px;text-align:center;white-space:nowrap">${eq.durabilityYears}年</td>
+                <td style="padding:8px 10px;white-space:nowrap">${formatDate(expiryDate)}</td>
+                <td style="padding:8px 10px;font-weight:600;color:#d97706;white-space:nowrap">${remTxt}</td>
+                <td style="padding:8px 10px;color:var(--gray-500)">${eq.department || eq.manageDept || '—'}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>` : '';
+
+  // Overdue groups
+  const groupsHtml = groups.map(g => `
+    <div class="card" style="margin-bottom:16px;border:1px solid ${g.headerColor}">
+      <div class="card-header" style="background:${g.color}">
+        <h3 style="color:${g.textColor}">耐久超過 ${g.label}（${g.items.length}台）</h3>
+      </div>
+      <div class="card-body">${renderTable(g.items, g.color)}</div>
+    </div>`).join('');
+
+  if (totalOverdue === 0 && approaching.length === 0) {
+    el.innerHTML = `
+      <div style="text-align:center;padding:60px 20px;color:var(--gray-400)">
+        <div style="font-size:48px;margin-bottom:12px">&#10003;</div>
+        <div style="font-size:16px">耐久年数を超過している機器はありません</div>
+        <div style="font-size:13px;margin-top:6px">機器マスターで耐久年数を設定すると、ここに表示されます</div>
+      </div>`;
+    return;
+  }
+
+  el.innerHTML = summaryHtml + approachingHtml + groupsHtml;
 }
 
 // ===================== DASHBOARD =====================
@@ -8095,10 +8544,25 @@ function showEquipmentEditModal(eqId) {
 
   const cats = [...new Set(allEquipment.map(e => e.category).filter(Boolean))].sort();
   const catOptions = cats.map(c => `<option value="${c}" ${eq && eq.category===c?'selected':''}>${c}</option>`).join('');
-  const v = (field) => eq ? (eq[field]||'').replace(/"/g,'&quot;') : '';
+  const v = (field) => eq ? (eq[field]||'').toString().replace(/"/g,'&quot;') : '';
+  // Date fields from sheet may be "yyyy/M/d" format; convert to "yyyy-MM-dd" for type="date" inputs
+  const vDate = (field) => {
+    if (!eq || !eq[field]) return '';
+    const raw = String(eq[field]).trim();
+    // Already yyyy-MM-dd
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+    // yyyy/M/d or yyyy/MM/dd
+    const m = raw.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+    if (m) return m[1] + '-' + m[2].padStart(2,'0') + '-' + m[3].padStart(2,'0');
+    // Try Date parse as fallback
+    const d = new Date(raw);
+    if (!isNaN(d.getTime())) return d.toISOString().slice(0,10);
+    return '';
+  };
 
   const assetTypes = ['購入','デモ','代替','贈呈','リース','レンタル'];
-  const assetOptions = assetTypes.map(t => `<option value="${t}" ${eq&&eq.assetType===t?'selected':''}>${t}</option>`).join('');
+  const eqAssetTrimmed = eq ? (eq.assetType||'').trim() : '';
+  const assetOptions = assetTypes.map(t => `<option value="${t}" ${eqAssetTrimmed===t?'selected':''}>${t}</option>`).join('');
 
   document.getElementById('modalBody').innerHTML = `
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
@@ -8159,7 +8623,7 @@ function showEquipmentEditModal(eqId) {
       </div>
       <div class="form-group">
         <label class="form-label">納入日</label>
-        <input type="date" class="form-input" id="editEqDeliveryDate" value="${v('deliveryDate')}">
+        <input type="date" class="form-input" id="editEqDeliveryDate" value="${vDate('deliveryDate')}">
       </div>
       <div class="form-group">
         <label class="form-label">購入価格</label>
@@ -8167,11 +8631,11 @@ function showEquipmentEditModal(eqId) {
       </div>
       <div class="form-group">
         <label class="form-label">代替・レンタル・デモ 開始日</label>
-        <input type="date" class="form-input" id="editEqRentalStart" value="${v('rentalStartDate')}">
+        <input type="date" class="form-input" id="editEqRentalStart" value="${vDate('rentalStartDate')}">
       </div>
       <div class="form-group">
         <label class="form-label">代替・レンタル・デモ 終了日</label>
-        <input type="date" class="form-input" id="editEqRentalEnd" value="${v('rentalEndDate')}">
+        <input type="date" class="form-input" id="editEqRentalEnd" value="${vDate('rentalEndDate')}">
       </div>
       <div class="form-group">
         <label class="form-label">保守契約</label>
@@ -8212,11 +8676,11 @@ function showEquipmentEditModal(eqId) {
       </div>
       <div class="form-group">
         <label class="form-label">保守契約開始日</label>
-        <input type="date" class="form-input" id="editEqMaintStart" value="${v('maintenanceStartDate')}">
+        <input type="date" class="form-input" id="editEqMaintStart" value="${vDate('maintenanceStartDate')}">
       </div>
       <div class="form-group">
         <label class="form-label">保守契約終了日</label>
-        <input type="date" class="form-input" id="editEqMaintEnd" value="${v('maintenanceEndDate')}">
+        <input type="date" class="form-input" id="editEqMaintEnd" value="${vDate('maintenanceEndDate')}">
       </div>
       <div class="form-group" id="editEqRatioDisplay" style="display:flex;align-items:center;gap:8px">
         <label class="form-label" style="margin-bottom:0">維持費率</label>
@@ -8224,7 +8688,29 @@ function showEquipmentEditModal(eqId) {
       </div>
 
       <!-- 点検設定 -->
-      <div style="grid-column:1/-1;font-size:13px;font-weight:700;color:var(--primary);border-bottom:2px solid var(--primary-light);padding-bottom:4px;margin-top:8px;margin-bottom:2px">点検設定</div>
+      <div style="grid-column:1/-1;font-size:13px;font-weight:700;color:var(--primary);border-bottom:2px solid var(--primary-light);padding-bottom:4px;margin-top:8px;margin-bottom:2px">点検・耐久設定</div>
+      <div class="form-group">
+        <label class="form-label">耐久年数（メーカー指定）</label>
+        <div style="display:flex;align-items:center;gap:6px">
+          <input type="number" class="form-input" id="editEqDurabilityYears" value="${v('durabilityYears')}" min="1" max="30" step="1" placeholder="例: 10" style="width:100px">
+          <span style="font-size:13px;color:var(--gray-500)">年</span>
+          ${(() => {
+            const dur = parseInt(eq?.durabilityYears);
+            const deliv = eq?.deliveryDate ? new Date(eq.deliveryDate) : null;
+            if (!dur || !deliv) return '';
+            const now = new Date();
+            const eolDate = new Date(deliv.getTime() + dur * 365.25 * 24 * 60 * 60 * 1000);
+            const overYears = (now - eolDate) / (365.25 * 24 * 60 * 60 * 1000);
+            if (overYears > 0) {
+              const yr = Math.ceil(overYears);
+              return `<span style="background:#fee2e2;color:#dc2626;font-weight:700;font-size:11px;padding:2px 8px;border-radius:10px">超過 ${yr >= 5 ? '5年以上' : yr + '年目'}</span>`;
+            } else {
+              const rem = Math.floor(-overYears);
+              return `<span style="background:#dcfce7;color:#16a34a;font-size:11px;padding:2px 8px;border-radius:10px">残 ${rem}年</span>`;
+            }
+          })()}
+        </div>
+      </div>
       <div class="form-group">
         <label class="form-label">初回点検月</label>
         <select class="form-select" id="editEqFirstInspMonth">
@@ -8246,6 +8732,17 @@ function showEquipmentEditModal(eqId) {
         </span>
       </div>
 
+      <!-- スポット点検予定 -->
+      <div style="grid-column:1/-1;font-size:13px;font-weight:700;color:#d97706;border-bottom:2px solid #fbbf24;padding-bottom:4px;margin-top:8px;margin-bottom:2px">&#128197; スポット点検・保守予定</div>
+      <div class="form-group">
+        <label class="form-label">次回スポット点検予定日</label>
+        <input type="date" class="form-input" id="editEqNextSpotInspDate" value="${vDate('nextSpotInspDate')}">
+      </div>
+      <div class="form-group" style="grid-column:span 2">
+        <label class="form-label">スポット点検備考（内容・担当業者等）</label>
+        <input type="text" class="form-input" id="editEqNextSpotInspNote" value="${v('nextSpotInspNote')}" placeholder="例: 年次校正 / メーカー訪問点検 / ○○会社">
+      </div>
+
       <!-- ステータス・廃棄 -->
       <div style="grid-column:1/-1;font-size:13px;font-weight:700;color:var(--primary);border-bottom:2px solid var(--primary-light);padding-bottom:4px;margin-top:8px;margin-bottom:2px">ステータス</div>
       <div class="form-group">
@@ -8260,7 +8757,7 @@ function showEquipmentEditModal(eqId) {
       </div>
       <div class="form-group">
         <label class="form-label">廃棄日</label>
-        <input type="date" class="form-input" id="editEqDiscardDate" value="${v('discardDate')}">
+        <input type="date" class="form-input" id="editEqDiscardDate" value="${vDate('discardDate')}">
       </div>
       <div class="form-group">
         <label class="form-label">廃棄理由</label>
@@ -8355,7 +8852,10 @@ async function saveEquipment(isNew) {
     annualMaintenanceCost: document.getElementById('editEqAnnualMaintCost').value.trim(),
     maintenanceStartDate: document.getElementById('editEqMaintStart').value,
     maintenanceEndDate: document.getElementById('editEqMaintEnd').value,
+    durabilityYears: document.getElementById('editEqDurabilityYears').value,
     firstInspectionMonth: document.getElementById('editEqFirstInspMonth').value,
+    nextSpotInspDate: document.getElementById('editEqNextSpotInspDate').value,
+    nextSpotInspNote: document.getElementById('editEqNextSpotInspNote').value.trim(),
     discardDate: document.getElementById('editEqDiscardDate').value,
     discardReason: document.getElementById('editEqDiscardReason').value.trim(),
     documentUrl: document.getElementById('editEqDocUrl').value.trim(),
