@@ -425,6 +425,9 @@ a{color:var(--primary);text-decoration:none}
     <div class="screen" id="screen-status">
       <div class="stats-grid" id="statusStats"></div>
 
+      <!-- 重点機器パネル -->
+      <div id="keyEqPanel" style="margin-bottom:20px"></div>
+
       <!-- Location filter tabs -->
       <div class="card" style="margin-bottom:20px">
         <div class="card-body" style="padding:12px 16px">
@@ -1958,6 +1961,7 @@ function getEquipmentFieldMap() {
     '年間保守費': 'annualMaintenanceCost', '保守契約開始日': 'maintenanceStartDate', '保守契約終了日': 'maintenanceEndDate',
     '初回点検月': 'firstInspectionMonth', '耐久年数': 'durabilityYears',
     'スポット点検予定日': 'nextSpotInspDate', 'スポット点検備考': 'nextSpotInspNote',
+    '取扱説明書URL': 'manualUrl',
   };
 }
 
@@ -2043,7 +2047,7 @@ function handleGetEquipment() {
   const sheetName = SHEET_NAMES.equipment;
   const sheet = getOrCreateSheet(sheetName);
   if (sheet.getLastRow() < 1) {
-    const defaultHeaders = ['機器ID','機器区分','機器名','型式','製造番号','管理部署','製造元','代理店','ステータス','貸出状態','現在地','保管場所','CH','資産区分','納入日','購入価格','代替レンタルデモ開始日','代替レンタルデモ終了日','保守契約','廃棄','廃棄日','廃棄理由','添付文書URL','備考','管理部門','保守契約形態','年間保守費','保守契約開始日','保守契約終了日','初回点検月','耐久年数','スポット点検予定日','スポット点検備考'];
+    const defaultHeaders = ['機器ID','機器区分','機器名','型式','製造番号','管理部署','製造元','代理店','ステータス','貸出状態','現在地','保管場所','CH','資産区分','納入日','購入価格','代替レンタルデモ開始日','代替レンタルデモ終了日','保守契約','廃棄','廃棄日','廃棄理由','添付文書URL','備考','管理部門','保守契約形態','年間保守費','保守契約開始日','保守契約終了日','初回点検月','耐久年数','スポット点検予定日','スポット点検備考','取扱説明書URL'];
     sheet.getRange(1, 1, 1, defaultHeaders.length).setValues([defaultHeaders]);
     return { success: true, data: [], headers: defaultHeaders };
   }
@@ -2718,7 +2722,8 @@ const SHEET_TO_APP_MAP = {
   '管理部門': 'managedByDept', '保守契約形態': 'maintenanceType',
   '年間保守費': 'annualMaintenanceCost', '保守契約開始日': 'maintenanceStartDate', '保守契約終了日': 'maintenanceEndDate',
   '初回点検月': 'firstInspectionMonth', '耐久年数': 'durabilityYears',
-  'スポット点検予定日': 'nextSpotInspDate', 'スポット点検備考': 'nextSpotInspNote'
+  'スポット点検予定日': 'nextSpotInspDate', 'スポット点検備考': 'nextSpotInspNote',
+  '取扱説明書URL': 'manualUrl'
 };
 
 // 維持費率算出
@@ -4235,6 +4240,9 @@ async function renderStatusScreen() {
     `).join('')}
   `;
 
+  // 重点機器パネル（輸液ポンプ・シリンジポンプ・人工呼吸器）
+  renderKeyEquipmentPanel(lentItems);
+
   // Summary cards
   document.getElementById('locSummaryGrid').innerHTML = locs.map(loc => {
     const items = locationMap[loc];
@@ -4266,6 +4274,101 @@ async function renderStatusScreen() {
       </div>
     `;
   }).join('');
+}
+
+function renderKeyEquipmentPanel(lentItems) {
+  // 各機器タイプの判定（カテゴリ名 OR 機器IDプレフィックス）
+  const KEY_TYPES = [
+    {
+      label: '輸液ポンプ',
+      color: '#3b82f6',
+      bg: '#eff6ff',
+      border: '#bfdbfe',
+      icon: '&#128167;',
+      match: eq => {
+        const cat = (eq.category || '').toLowerCase();
+        const id = (eq.id || '').toUpperCase();
+        return cat.includes('輸液') || id.startsWith('CE-IP') || id.startsWith('DE-IP');
+      }
+    },
+    {
+      label: 'シリンジポンプ',
+      color: '#8b5cf6',
+      bg: '#f5f3ff',
+      border: '#ddd6fe',
+      icon: '&#128137;',
+      match: eq => {
+        const cat = (eq.category || '').toLowerCase();
+        const id = (eq.id || '').toUpperCase();
+        return cat.includes('シリンジ') || id.startsWith('CE-SP') || id.startsWith('DE-SP');
+      }
+    },
+    {
+      label: '人工呼吸器',
+      color: '#ef4444',
+      bg: '#fff1f2',
+      border: '#fecdd3',
+      icon: '&#129658;',
+      match: eq => {
+        const cat = (eq.category || '').toLowerCase();
+        const id = (eq.id || '').toUpperCase();
+        return cat.includes('呼吸器') || id.startsWith('CE-RE') || id.startsWith('DE-RE');
+      }
+    }
+  ];
+
+  const panels = KEY_TYPES.map(type => {
+    const typeItems = lentItems.filter(type.match);
+    const total = typeItems.length;
+
+    // 貸出先ごとにグループ化
+    const locMap = {};
+    typeItems.forEach(eq => {
+      const loc = eq.location || '不明';
+      if (!locMap[loc]) locMap[loc] = [];
+      locMap[loc].push(eq);
+    });
+    const locs = Object.keys(locMap).sort();
+
+    const locRows = locs.length === 0
+      ? `<div style="color:var(--gray-400);font-size:13px;padding:8px 0">貸出なし</div>`
+      : locs.map(loc => {
+          const eqs = locMap[loc];
+          const ids = eqs.map(eq =>
+            `<span style="display:inline-block;background:${type.color}18;border:1px solid ${type.color}44;
+                          color:${type.color};font-size:11px;font-weight:600;padding:1px 7px;
+                          border-radius:6px;margin:2px 2px;cursor:pointer;white-space:nowrap"
+                   title="${eq.name||''}"
+                   onclick="filterStatusLocation('${loc}');document.querySelectorAll('.location-tab').forEach(t=>{t.classList.toggle('active',t.textContent.trim().startsWith('${loc}'));})">
+              ${eq.id}
+            </span>`
+          ).join('');
+          return `
+            <div style="display:flex;align-items:flex-start;gap:8px;padding:5px 0;border-bottom:1px dashed #e5e7eb">
+              <div style="min-width:110px;font-size:12px;font-weight:600;color:#374151;padding-top:3px">${loc}</div>
+              <div style="font-size:13px;font-weight:700;color:${type.color};min-width:28px;padding-top:3px">${eqs.length}台</div>
+              <div style="flex:1;display:flex;flex-wrap:wrap;gap:0">${ids}</div>
+            </div>`;
+        }).join('');
+
+    return `
+      <div style="background:${type.bg};border:1px solid ${type.border};border-radius:12px;padding:14px 16px;flex:1;min-width:240px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <div style="display:flex;align-items:center;gap:6px">
+            <span style="font-size:20px">${type.icon}</span>
+            <span style="font-size:14px;font-weight:700;color:${type.color}">${type.label}</span>
+          </div>
+          <span style="background:${type.color};color:#fff;font-size:15px;font-weight:700;
+                        padding:2px 12px;border-radius:20px">${total}台</span>
+        </div>
+        <div style="font-size:12px">${locRows}</div>
+      </div>`;
+  });
+
+  document.getElementById('keyEqPanel').innerHTML = `
+    <div style="display:flex;gap:12px;flex-wrap:wrap">
+      ${panels.join('')}
+    </div>`;
 }
 
 function filterStatusLocation(loc) {
@@ -4562,6 +4665,64 @@ function openInspManual(url, title) {
       </div>
       <iframe src="${url}" style="flex:1;border:none;width:100%"
               allow="autoplay" loading="lazy"></iframe>
+    </div>`;
+  document.body.appendChild(panel);
+}
+
+// 機器取扱説明書ビューア
+function openEquipmentManual(url, title) {
+  const existing = document.getElementById('eqManualPanel');
+  if (existing) existing.remove();
+
+  // Google Drive / Docs の閲覧URLを変換
+  let viewUrl = url.trim();
+  // Google Drive ファイル: /file/d/{id}/view → /file/d/{id}/preview
+  viewUrl = viewUrl.replace(/\/file\/d\/([^/]+)\/view(\?.*)?$/, '/file/d/$1/preview');
+  // Google Docs: /document/d/{id}/edit → /document/d/{id}/preview
+  viewUrl = viewUrl.replace(/\/document\/d\/([^/]+)\/(edit|pub)(\?.*)?$/, '/document/d/$1/preview');
+  // Google Sheets: /spreadsheets/d/{id}/edit → embed
+  viewUrl = viewUrl.replace(/\/spreadsheets\/d\/([^/]+)\/(edit|pub)(\?.*)?$/, '/spreadsheets/d/$1/preview');
+  // PDF の場合はそのまま（ブラウザが処理）
+
+  const isPdf = /\.pdf(\?|#|$)/i.test(viewUrl);
+  const isGoogleUrl = /docs\.google\.com|drive\.google\.com/i.test(viewUrl);
+
+  const panel = document.createElement('div');
+  panel.id = 'eqManualPanel';
+  panel.innerHTML = `
+    <div style="position:fixed;top:0;right:0;width:min(680px,96vw);height:100vh;
+                background:#fff;box-shadow:-4px 0 28px rgba(0,0,0,.22);
+                z-index:9100;display:flex;flex-direction:column">
+      <div style="display:flex;align-items:center;justify-content:space-between;
+                  padding:12px 16px;background:#0ea5e9;color:#fff;flex-shrink:0">
+        <div style="display:flex;align-items:center;gap:8px;min-width:0">
+          <span style="font-size:20px">&#128214;</span>
+          <div style="min-width:0">
+            <div style="font-weight:700;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${title}</div>
+            <div style="font-size:11px;opacity:.8">取扱説明書</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0">
+          <a href="${url}" target="_blank"
+             style="background:rgba(255,255,255,.2);color:#fff;border:none;padding:5px 11px;border-radius:6px;cursor:pointer;font-size:12px;text-decoration:none;display:inline-flex;align-items:center;gap:4px">
+            &#128279; 別タブで開く
+          </a>
+          <button onclick="document.getElementById('eqManualPanel').remove()"
+                  style="background:rgba(255,255,255,.2);color:#fff;border:none;padding:5px 11px;border-radius:6px;cursor:pointer;font-size:14px">&#10005;</button>
+        </div>
+      </div>
+      ${(isPdf || isGoogleUrl)
+        ? `<iframe src="${viewUrl}" style="flex:1;border:none;width:100%" allow="autoplay" loading="lazy"></iframe>`
+        : `<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px;gap:16px;background:#f8fafc">
+             <div style="font-size:48px">&#127760;</div>
+             <div style="font-size:15px;font-weight:600;color:#334155">外部Webページ</div>
+             <div style="font-size:13px;color:#64748b;text-align:center;max-width:320px">セキュリティ制限のためインライン表示できません。<br>別タブで開いてご確認ください。</div>
+             <a href="${url}" target="_blank"
+                style="background:#0ea5e9;color:#fff;border-radius:10px;padding:10px 24px;text-decoration:none;font-weight:600;font-size:14px">
+               &#128279; 別タブで開く
+             </a>
+           </div>`
+      }
     </div>`;
   document.body.appendChild(panel);
 }
@@ -8521,6 +8682,7 @@ function filterMasterEquipment() {
       <td style="font-size:11px;white-space:nowrap">${eq.maintenanceType||'<span style="color:var(--gray-400)">-</span>'}</td>
       <td>${maintenanceRatioBadge(calcMaintenanceRatio(eq))}</td>
       <td style="white-space:nowrap">
+        ${eq.manualUrl ? `<button class="btn btn-sm" onclick="openEquipmentManual('${eq.manualUrl.replace(/'/g,'&#39;')}','${(eq.name||eq.id).replace(/'/g,'&#39;')} 取扱説明書')" style="background:#0ea5e9;color:#fff;margin-right:4px" title="取扱説明書を閲覧">&#128214; 取説</button>` : ''}
         <button class="btn btn-sm btn-outline" onclick="showEquipmentEditModal('${eq.id}')">&#9998; 編集</button>
         <button class="btn btn-sm btn-danger" onclick="deleteEquipment('${eq.id}')" style="margin-left:4px">&#128465;</button>
       </td>
@@ -8543,7 +8705,6 @@ function showEquipmentEditModal(eqId) {
   document.getElementById('modal').style.maxWidth = '820px';
 
   const cats = [...new Set(allEquipment.map(e => e.category).filter(Boolean))].sort();
-  const catOptions = cats.map(c => `<option value="${c}" ${eq && eq.category===c?'selected':''}>${c}</option>`).join('');
   const v = (field) => eq ? (eq[field]||'').toString().replace(/"/g,'&quot;') : '';
   // Date fields from sheet may be "yyyy/M/d" format; convert to "yyyy-MM-dd" for type="date" inputs
   const vDate = (field) => {
@@ -8574,11 +8735,11 @@ function showEquipmentEditModal(eqId) {
       </div>
       <div class="form-group">
         <label class="form-label">機器区分 *</label>
-        <select class="form-select" id="editEqCategory">
-          <option value="">選択...</option>${catOptions}
-          <option value="__new__">+ 新規カテゴリ</option>
-        </select>
-        <input type="text" class="form-input" id="editEqCategoryNew" style="display:none;margin-top:4px" placeholder="新しいカテゴリ名">
+        <input type="text" class="form-input" id="editEqCategory" list="editEqCategoryList"
+               value="${eq ? (eq.category||'') : ''}" placeholder="選択または直接入力" autocomplete="off">
+        <datalist id="editEqCategoryList">
+          ${cats.map(c => `<option value="${c}">`).join('')}
+        </datalist>
       </div>
       <div class="form-group">
         <label class="form-label">CH (チャンネル)</label>
@@ -8767,7 +8928,18 @@ function showEquipmentEditModal(eqId) {
       <!-- その他 -->
       <div style="grid-column:1/-1;font-size:13px;font-weight:700;color:var(--primary);border-bottom:2px solid var(--primary-light);padding-bottom:4px;margin-top:8px;margin-bottom:2px">その他</div>
       <div class="form-group" style="grid-column:1/-1">
-        <label class="form-label">添付文書URL</label>
+        <label class="form-label">&#128214; 取扱説明書URL（Web・PDF）</label>
+        <div style="display:flex;gap:6px;align-items:center">
+          <input type="url" class="form-input" id="editEqManualUrl" value="${v('manualUrl')}" placeholder="https://... （WebページまたはPDF URL）" style="flex:1">
+          <button type="button" onclick="(function(){const u=document.getElementById('editEqManualUrl').value.trim();if(!u){return;}openEquipmentManual(u,'取扱説明書');})();"
+                  style="background:var(--primary);color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:13px;cursor:pointer;white-space:nowrap;flex-shrink:0">
+            &#128214; 閲覧
+          </button>
+        </div>
+        <div style="font-size:11px;color:var(--gray-400);margin-top:4px">Google Drive PDF / Google Docs / メーカーWebページ など</div>
+      </div>
+      <div class="form-group" style="grid-column:1/-1">
+        <label class="form-label">添付文書URL（その他）</label>
         <input type="url" class="form-input" id="editEqDocUrl" value="${v('documentUrl')}" placeholder="https://...">
       </div>
       <div class="form-group" style="grid-column:1/-1">
@@ -8776,11 +8948,6 @@ function showEquipmentEditModal(eqId) {
       </div>
     </div>
   `;
-
-  // Toggle new category input
-  document.getElementById('editEqCategory').addEventListener('change', function() {
-    document.getElementById('editEqCategoryNew').style.display = this.value === '__new__' ? 'block' : 'none';
-  });
 
   // 初回点検月プレビュー更新
   document.getElementById('editEqFirstInspMonth').addEventListener('change', function() {
@@ -8805,11 +8972,8 @@ async function saveEquipment(isNew) {
   const id = document.getElementById('editEqId').value.trim();
   if (!id) { showToast('機器IDを入力してください', 'error'); return; }
 
-  let category = document.getElementById('editEqCategory').value;
-  if (category === '__new__') {
-    category = document.getElementById('editEqCategoryNew').value.trim();
-    if (!category) { showToast('カテゴリ名を入力してください', 'error'); return; }
-  }
+  const category = document.getElementById('editEqCategory').value.trim();
+  if (!category) { showToast('機器区分を入力してください', 'error'); return; }
 
   const name = document.getElementById('editEqName').value.trim();
   if (!name) { showToast('機器名を入力してください', 'error'); return; }
@@ -8858,6 +9022,7 @@ async function saveEquipment(isNew) {
     nextSpotInspNote: document.getElementById('editEqNextSpotInspNote').value.trim(),
     discardDate: document.getElementById('editEqDiscardDate').value,
     discardReason: document.getElementById('editEqDiscardReason').value.trim(),
+    manualUrl: document.getElementById('editEqManualUrl').value.trim(),
     documentUrl: document.getElementById('editEqDocUrl').value.trim(),
     notes: document.getElementById('editEqNotes').value.trim(),
     status: (status === '廃棄' || status === '廃棄待ち') ? '' : status,
