@@ -879,6 +879,7 @@ a{color:var(--primary);text-decoration:none}
         <div style="display:flex;gap:8px">
           <button class="btn btn-primary" onclick="showEquipmentEditModal()">+ 新規機器登録</button>
           <button class="btn btn-outline" onclick="exportEquipmentCSV()">&#128229; CSV出力</button>
+          <button class="btn btn-success" onclick="syncAllLocalEquipment()" id="syncAllBtn">⬆️ ローカルデータを Sheets に同期</button>
         </div>
       </div>
       <div class="card">
@@ -9120,6 +9121,71 @@ async function deleteEquipment(eqId) {
   allEquipment = allEquipment.filter(e => e.id !== eqId);
   filterMasterEquipment();
   showToast(`${eqId} を削除しました`, 'info');
+}
+
+/**
+ * Sync all local equipment records to Google Sheets
+ */
+async function syncAllLocalEquipment() {
+  const btn = document.getElementById('syncAllBtn');
+  if (!btn) return;
+
+  if (!syncEnabled) {
+    showToast('Google Sheets同期が有効になっていません。設定画面で GAS URL を入力してください。', 'warning');
+    return;
+  }
+
+  const count = allEquipment.length;
+  if (count === 0) {
+    showToast('同期するデータがありません', 'warning');
+    return;
+  }
+
+  // Confirmation dialog
+  const confirmed = confirm(`ローカルデータの${count}件をすべてGoogle Sheetsに同期します。\n※既存データは上書きされます。\n\n実行しますか？`);
+  if (!confirmed) return;
+
+  try {
+    const originalText = btn.innerText;
+    btn.disabled = true;
+    btn.innerText = '⏳ 同期中...';
+
+    // Call GAS to sync all equipment
+    const result = await gasPost('syncAll', { equipment: allEquipment });
+
+    if (result.success && result.results && result.results.equipment && result.results.equipment.success) {
+      // Clear local cache and refetch from Sheets to make Sheets authoritative
+      const tx = db.transaction('equipment', 'readwrite');
+      tx.objectStore('equipment').clear();
+      await new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = rej; });
+
+      // Refetch equipment from Google Sheets
+      const sheetResult = await gasPost('getEquipment', {});
+      if (sheetResult.success && sheetResult.data && sheetResult.data.length > 0) {
+        const mappedData = sheetResult.data;
+
+        for (const eq of mappedData) {
+          await dbPut('equipment', eq);
+        }
+
+        allEquipment = mappedData;
+        filterMasterEquipment();
+
+        showToast(`✓ ${count}件のデータをGoogle Sheetsに同期しました`, 'success');
+      } else {
+        showToast('データ同期後の再読み込みに失敗しました', 'error');
+      }
+    } else {
+      showToast('同期に失敗しました。詳しくはコンソールを確認してください', 'error');
+      console.error('Sync result:', result);
+    }
+  } catch (error) {
+    console.error('Sync error:', error);
+    showToast(`同期エラー: ${error.message}`, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerText = originalText;
+  }
 }
 
 function exportEquipmentCSV() {
