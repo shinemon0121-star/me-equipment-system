@@ -845,12 +845,15 @@ a{color:var(--primary);text-decoration:none}
     <!-- ========== 機器マスター管理画面 ========== -->
     <div class="screen" id="screen-master-equipment">
       <!-- View Toggle Tabs -->
-      <div style="display:flex;gap:4px;margin-bottom:16px">
+      <div style="display:flex;gap:4px;margin-bottom:16px;flex-wrap:wrap">
         <button class="btn" id="meqViewAll" onclick="setMeqView('all')" style="border-radius:8px 8px 0 0;border:1px solid var(--gray-200);border-bottom:2px solid var(--primary);background:var(--primary);color:#fff;font-weight:600">
           &#128203; 全機器一覧
         </button>
         <button class="btn" id="meqViewActive" onclick="setMeqView('active')" style="border-radius:8px 8px 0 0;border:1px solid var(--gray-200);border-bottom:none;background:#fff;color:var(--gray-600)">
           &#9989; 使用可能機器
+        </button>
+        <button class="btn" id="meqViewLab" onclick="setMeqView('lab')" style="border-radius:8px 8px 0 0;border:1px solid var(--gray-200);border-bottom:none;background:#fff;color:var(--gray-600)">
+          &#128300; 臨床検査部
         </button>
       </div>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
@@ -5377,7 +5380,10 @@ function switchInspTab(tab) {
   if (tab==='history') renderInspHistory();
 }
 
-function initInspectionScreen() {
+async function initInspectionScreen() {
+  // 当月対象機器フィルタリング用に点検履歴を読み込む
+  allInspections = await dbGetAll('inspections');
+
   renderMonthlyDuePanel();
   renderInspTypeGrid();
   populateInspHistTypeFilter();
@@ -5385,7 +5391,10 @@ function initInspectionScreen() {
 
 // 今月の定期点検対象機器を計算して返す
 function getMonthlyDueEquipment() {
-  const thisMonth = new Date().getMonth() + 1; // 1-12
+  const today = new Date();
+  const thisMonth = today.getMonth() + 1; // 1-12
+  const thisYear = today.getFullYear();
+
   return allEquipment.filter(eq => {
     // 除外条件（年間点検予定表と同じロジック）
     const disc = (eq.discard || '').trim();
@@ -5400,7 +5409,22 @@ function getMonthlyDueEquipment() {
     // 今月が点検月かチェック
     const interval = getInspectionInterval(eq.id);
     const months = getInspectionMonths(parseInt(eq.firstInspectionMonth), interval);
-    return months.includes(thisMonth);
+    if (!months.includes(thisMonth)) return false;
+
+    // 今月の点検登録済みをチェック
+    const alreadyInspected = allInspections.some(insp => {
+      if ((insp.equipmentId || '').toUpperCase() !== eq.id.toUpperCase()) return false;
+      const inspDate = insp.date || '';
+      if (!inspDate) return false;
+      // 日付形式: YYYY-MM-DD または YYYY/M/D など
+      const match = inspDate.match(/^(\d{4})[\/\-](\d{1,2})[\/\-]/);
+      if (!match) return false;
+      const inspYear = parseInt(match[1]);
+      const inspMonth = parseInt(match[2]);
+      return inspYear === thisYear && inspMonth === thisMonth;
+    });
+
+    return !alreadyInspected;
   });
 }
 
@@ -5881,6 +5905,11 @@ async function submitInspection() {
 
   await dbPut('inspections', inspection);
   showToast(`${config.name}の点検結果を登録しました (${eqId})`, 'success');
+
+  // 当月対象機器リストを更新（点検済み機器が削除される）
+  allInspections.push(inspection);
+  renderMonthlyDuePanel();
+  renderInspTypeGrid();
 
   // Try to sync to GAS
   syncInspectionToGas(inspection, config).catch(err => console.warn('GAS sync failed:', err));
@@ -8577,26 +8606,28 @@ function getStatusBadge(status) {
 // ===================== MASTER: EQUIPMENT =====================
 let meqPage = 0;
 const MEQ_PAGE_SIZE = 30;
-let meqViewMode = 'all'; // 'all' or 'active'
+let meqViewMode = 'all'; // 'all' | 'active' | 'lab'
 
 function setMeqView(mode) {
   meqViewMode = mode;
   meqPage = 0;
 
-  // Update tab styles
-  const allBtn = document.getElementById('meqViewAll');
-  const activeBtn = document.getElementById('meqViewActive');
-  if (mode === 'all') {
-    allBtn.style.background = 'var(--primary)'; allBtn.style.color = '#fff';
-    allBtn.style.borderBottom = '2px solid var(--primary)'; allBtn.style.fontWeight = '600';
-    activeBtn.style.background = '#fff'; activeBtn.style.color = 'var(--gray-600)';
-    activeBtn.style.borderBottom = 'none'; activeBtn.style.fontWeight = '400';
-  } else {
-    activeBtn.style.background = 'var(--success)'; activeBtn.style.color = '#fff';
-    activeBtn.style.borderBottom = '2px solid var(--success)'; activeBtn.style.fontWeight = '600';
-    allBtn.style.background = '#fff'; allBtn.style.color = 'var(--gray-600)';
-    allBtn.style.borderBottom = 'none'; allBtn.style.fontWeight = '400';
-  }
+  // Reset all tabs to inactive style
+  const tabs = {
+    all:    { btn: document.getElementById('meqViewAll'),    color: 'var(--primary)', border: 'var(--primary)' },
+    active: { btn: document.getElementById('meqViewActive'), color: 'var(--success)',  border: 'var(--success)' },
+    lab:    { btn: document.getElementById('meqViewLab'),    color: '#0891b2',         border: '#0891b2' }
+  };
+  Object.entries(tabs).forEach(([key, t]) => {
+    if (!t.btn) return;
+    if (key === mode) {
+      t.btn.style.background = t.color; t.btn.style.color = '#fff';
+      t.btn.style.borderBottom = `2px solid ${t.border}`; t.btn.style.fontWeight = '600';
+    } else {
+      t.btn.style.background = '#fff'; t.btn.style.color = 'var(--gray-600)';
+      t.btn.style.borderBottom = 'none'; t.btn.style.fontWeight = '400';
+    }
+  });
 
   filterMasterEquipment();
 }
@@ -8630,17 +8661,22 @@ function filterMasterEquipment() {
   const cat = document.getElementById('meqCatFilter').value;
   const deptFilter = document.getElementById('meqDeptFilter')?.value || '';
 
+  const LAB_DEPT_NAME = '検査';
+
   let filtered = allEquipment.filter(eq => {
     // View mode filter
     if (meqViewMode === 'active' && !isEquipmentActive(eq)) return false;
+    if (meqViewMode === 'lab' && (eq.managedByDept || '').trim() !== LAB_DEPT_NAME) return false;
     // Search filter
     if (search && !eq.id.toLowerCase().includes(search) &&
         !(eq.name||'').toLowerCase().includes(search) &&
         !(eq.model||'').toLowerCase().includes(search)) return false;
     if (cat && eq.category !== cat) return false;
-    // Department filter
-    if (deptFilter === '__unset__' && eq.managedByDept) return false;
-    if (deptFilter && deptFilter !== '__unset__' && eq.managedByDept !== deptFilter) return false;
+    // Department filter (labモード時はdeptFilterを無視して固定)
+    if (meqViewMode !== 'lab') {
+      if (deptFilter === '__unset__' && eq.managedByDept) return false;
+      if (deptFilter && deptFilter !== '__unset__' && eq.managedByDept !== deptFilter) return false;
+    }
     return true;
   });
 
@@ -8649,6 +8685,9 @@ function filterMasterEquipment() {
   if (meqViewMode === 'active') {
     const totalActive = allEquipment.filter(isEquipmentActive).length;
     labelEl.textContent = `使用可能: ${totalActive}台 / 全${allEquipment.length}台`;
+  } else if (meqViewMode === 'lab') {
+    const labTotal = allEquipment.filter(e => (e.managedByDept||'').trim() === LAB_DEPT_NAME).length;
+    labelEl.textContent = `検査部門: ${labTotal}台`;
   } else {
     labelEl.textContent = `全${allEquipment.length}台`;
   }
