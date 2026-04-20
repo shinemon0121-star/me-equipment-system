@@ -6411,9 +6411,8 @@ async function saveRepairsToDb(dataArr) {
   const store = tx.objectStore('repairs');
   let idx = 0;
   for (const r of dataArr) {
-    // repairId: 修理ID カラムがない場合は機器ID+受付日から生成
-    const key = r['修理ID'] || r.repairId
-      || `REP-${(r['機器ID']||r.equipmentId||'X')}-${(r['受付日']||r.receptionDate||idx).toString().replace(/\//g,'')}`;
+    // repairId: GASが既に自動生成しているため、ここでは付加しない
+    const key = r['修理ID'] || r.repairId;
     idx++;
 
     // 修理完了判定: TRUE/FALSE, Yes/No, 完了 すべて対応
