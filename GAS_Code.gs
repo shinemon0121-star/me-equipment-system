@@ -589,13 +589,38 @@ function handleDeleteRepair(repairId) {
   const lastRow = sheet.getLastRow();
   if (lastRow <= 1) return { success: false, error: 'データがありません' };
 
-  const ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
-  for (let i = ids.length - 1; i >= 0; i--) {
-    if (String(ids[i][0]) === String(repairId)) {
-      sheet.deleteRow(i + 2);
+  // 全データを取得して検索
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+
+  // 複数のパターンで検索
+  for (let i = data.length - 1; i >= 1; i--) {
+    const row = {};
+    for (let j = 0; j < headers.length; j++) {
+      row[headers[j]] = String(data[i][j] || '');
+    }
+
+    // パターン1: 修理IDが完全一致
+    if (row['修理ID'] === String(repairId)) {
+      sheet.deleteRow(i + 1);
+      return { success: true, message: repairId + ' を削除しました' };
+    }
+
+    // パターン2: 機器ID + 受付日 で一致（自動生成IDの場合）
+    const genId = `REP-${row['機器ID'] || ''}-${(row['受付日'] || '').replace(/\//g, '')}`;
+    if (genId === String(repairId)) {
+      sheet.deleteRow(i + 1);
+      return { success: true, message: repairId + ' を削除しました' };
+    }
+
+    // パターン3: repairIdが何らかのUUID/不正なIDの場合、機器ID + 日付が対応するかチェック
+    // (フロントから送られるrepairIdが自動生成IDと異なる場合の対応)
+    if (String(repairId).length < 20 && row['修理ID'].substring(0, Math.min(10, repairId.length)) === String(repairId).substring(0, 10)) {
+      sheet.deleteRow(i + 1);
       return { success: true, message: repairId + ' を削除しました' };
     }
   }
+
   return { success: false, error: repairId + ' が見つかりません' };
 }
 
