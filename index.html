@@ -6411,8 +6411,14 @@ async function saveRepairsToDb(dataArr) {
   const store = tx.objectStore('repairs');
   let idx = 0;
   for (const r of dataArr) {
-    // repairId: GASが既に自動生成しているため、ここでは付加しない
-    const key = r['修理ID'] || r.repairId;
+    // 修理ID の生成（ここだけで行う）
+    let key = r['修理ID'] || r.repairId;
+    if (!key) {
+      // 修理IDがない場合：機器ID + 受付日 から生成
+      const equipmentId = r['機器ID'] || r.equipmentId || 'X';
+      const dateStr = (r['受付日'] || r.receptionDate || '').toString().replace(/\//g, '');
+      key = `REP-${equipmentId}-${dateStr}`;
+    }
     idx++;
 
     // 修理完了判定: TRUE/FALSE, Yes/No, 完了 すべて対応

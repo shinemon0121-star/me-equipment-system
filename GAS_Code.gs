@@ -493,15 +493,6 @@ function handleGetRepairs() {
       if (val !== '' && val !== null && val !== undefined) hasData = true;
     }
     if (hasData) {
-      // 修理IDがない場合は自動生成
-      if (!row['修理ID'] || row['修理ID'].trim() === '') {
-        const equipmentId = row['機器ID'] || '';
-        const dateStr = row['受付日'] || '';
-        row['修理ID'] = 'REP-' + equipmentId + '-' + dateStr.replace(/\//g, '') + '-' + i;
-        Logger.log('修理ID自動生成: ' + row['修理ID'] + ' (機器ID: ' + equipmentId + ')');
-      } else {
-        Logger.log('修理ID既存: ' + row['修理ID']);
-      }
       rows.push(row);
     }
   }
