@@ -3515,14 +3515,24 @@ async function ensureDB() {
 
 function dbTx(storeName, mode = 'readonly') {
   if (!db) throw new Error('データベースが未初期化です。ページを再読み込みしてください。');
-  return db.transaction(storeName, mode).objectStore(storeName);
+  try {
+    return db.transaction(storeName, mode).objectStore(storeName);
+  } catch (e) {
+    console.warn('トランザクション作成失敗:', e.message);
+    throw e;
+  }
 }
 
 function dbGetAll(storeName) {
   return new Promise((resolve, reject) => {
-    const req = dbTx(storeName).getAll();
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
+    try {
+      const req = dbTx(storeName).getAll();
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    } catch (e) {
+      console.error('dbGetAll エラー:', e.message);
+      resolve([]);
+    }
   });
 }
 
@@ -6309,22 +6319,27 @@ function setRepairView(mode) {
 }
 
 async function filterRepairs() {
-  const repairs = await dbGetAll('repairs');
-  const search = (document.getElementById('repairSearch')?.value || '').trim().toLowerCase();
-  let filtered = repairs;
+  try {
+    const repairs = await dbGetAll('repairs');
+    const search = (document.getElementById('repairSearch')?.value || '').trim().toLowerCase();
+    let filtered = repairs;
 
-  if (search) {
-    filtered = filtered.filter(r => (r.equipmentId || '').toLowerCase().includes(search) || (r.equipmentName || '').toLowerCase().includes(search) || (r.repairId || '').toLowerCase().includes(search));
-  }
-  if (repairViewMode === 'open') {
-    filtered = filtered.filter(r => !r.repairCompleted);
-  } else if (repairViewMode === 'done') {
-    filtered = filtered.filter(r => r.repairCompleted);
-  }
+    if (search) {
+      filtered = filtered.filter(r => (r.equipmentId || '').toLowerCase().includes(search) || (r.equipmentName || '').toLowerCase().includes(search) || (r.repairId || '').toLowerCase().includes(search));
+    }
+    if (repairViewMode === 'open') {
+      filtered = filtered.filter(r => !r.repairCompleted);
+    } else if (repairViewMode === 'done') {
+      filtered = filtered.filter(r => r.repairCompleted);
+    }
 
-  filtered.sort((a, b) => (b.receptionDate || b.date || '').localeCompare(a.receptionDate || a.date || ''));
-  renderRepairTable(filtered);
-  renderRepairStats(repairs);
+    filtered.sort((a, b) => (b.receptionDate || b.date || '').localeCompare(a.receptionDate || a.date || ''));
+    renderRepairTable(filtered);
+    renderRepairStats(repairs);
+  } catch (e) {
+    console.error('filterRepairs エラー:', e);
+    renderRepairTable([]);
+  }
 }
 
 function renderRepairStats(repairs) {
