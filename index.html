@@ -6889,14 +6889,20 @@ async function editRepair(repairId) {
 async function deleteRepair(repairId) {
   if (!confirm('この修理記録を削除しますか？')) return;
 
+  console.log('🔴 削除開始: repairId=' + repairId);
+
   try {
     // Google Sheetsから削除
     if (syncEnabled && GAS_URL) {
+      console.log('GASに削除リクエスト送信...');
       const result = await gasPost('deleteRepair', { repairId });
+      console.log('GAS応答:', JSON.stringify(result));
       if (!result.success) {
+        console.error('GAS削除失敗:', result.error);
         showToast('削除に失敗しました: ' + (result.error || '不明なエラー'), 'error');
         return;
       }
+      console.log('✅ GAS削除成功');
     }
 
     // IndexedDBからも削除
