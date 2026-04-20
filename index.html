@@ -2722,7 +2722,7 @@ function handleDeleteExtendedSpec(id) {
 }`;
 
 const GAS_CONFIG_KEY = 'ME_GAS_URL';
-let GAS_URL = localStorage.getItem(GAS_CONFIG_KEY) || '';
+let GAS_URL = localStorage.getItem(GAS_CONFIG_KEY) || 'https://script.google.com/macros/s/AKfycbyiC_axARnMdMb-bTOje6jAflVGFtv12bGPHq1AjIoAL30HyyOVpDg6249-Dhycw8Rq/exec';
 let syncEnabled = !!GAS_URL;
 let isSyncing = false;
 let lastSyncTime = localStorage.getItem('ME_LAST_SYNC') || '';
