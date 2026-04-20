@@ -6360,7 +6360,10 @@ function renderRepairTable(repairs) {
       <td>${r.workCategory || '-'}</td>
       <td>${condBadge}</td>
       <td>${completeBadge}</td>
-      <td><button class="btn btn-outline btn-sm" onclick="showRepairDetail('${r.repairId}')">詳細</button></td>
+      <td style="display:flex;gap:6px">
+        <button class="btn btn-outline btn-sm" onclick="showRepairDetail('${r.repairId}')">詳細</button>
+        <button class="btn btn-outline btn-sm" onclick="deleteRepair('${r.repairId}')" style="color:var(--danger);border-color:var(--danger)">削除</button>
+      </td>
     </tr>`;
   }).join('');
 }
@@ -6885,14 +6888,31 @@ async function editRepair(repairId) {
 
 async function deleteRepair(repairId) {
   if (!confirm('この修理記録を削除しますか？')) return;
-  const db2 = await openDB();
-  const tx = db2.transaction('repairs', 'readwrite');
-  tx.objectStore('repairs').delete(repairId);
-  await new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = rej; });
-  closeModal();
-  document.getElementById('modal').style.maxWidth = '600px';
-  renderRepairs();
-  showToast('修理記録を削除しました', 'success');
+
+  try {
+    // Google Sheetsから削除
+    if (syncEnabled && GAS_URL) {
+      const result = await gasPost('deleteRepair', { repairId });
+      if (!result.success) {
+        showToast('削除に失敗しました: ' + (result.error || '不明なエラー'), 'error');
+        return;
+      }
+    }
+
+    // IndexedDBからも削除
+    const db2 = await openDB();
+    const tx = db2.transaction('repairs', 'readwrite');
+    tx.objectStore('repairs').delete(repairId);
+    await new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = rej; });
+
+    closeModal();
+    document.getElementById('modal').style.maxWidth = '600px';
+    renderRepairs();
+    showToast('修理記録を削除しました', 'success');
+  } catch (e) {
+    console.error('削除エラー:', e);
+    showToast('削除処理でエラーが発生しました: ' + e.message, 'error');
+  }
 }
 
 // ===================== QUICK REPAIR (スマホ修理依頼) =====================

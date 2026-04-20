@@ -183,6 +183,7 @@ function doPost(e) {
       case 'addInspection': result = handleAddInspection(body.data); break;
       case 'addTypedInspection': result = handleAddTypedInspection(body.sheetName, body.data); break;
       case 'addRepair': result = handleAddRepair(body.data); break;
+      case 'deleteRepair': result = handleDeleteRepair(body.repairId); break;
       case 'saveStaff': result = handleSaveStaff(body.data); break;
       case 'deleteStaff': result = handleDeleteStaff(body.id); break;
       case 'saveDepartment': result = handleSaveDepartment(body.data); break;
@@ -574,6 +575,28 @@ function ensureRepairColumns(sheet, data) {
   if (columnsAdded) {
     Logger.log('修理シートにカラムを追加しました');
   }
+}
+
+function handleDeleteRepair(repairId) {
+  const ss = getSpreadsheet();
+  let sheet = ss.getSheetByName(SHEET_NAMES.repair);
+  if (!sheet) {
+    sheet = getSheetByGid(895124206);
+    if (sheet) SHEET_NAMES.repair = sheet.getName();
+  }
+  if (!sheet) return { success: false, error: '修理シートが見つかりません' };
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow <= 1) return { success: false, error: 'データがありません' };
+
+  const ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+  for (let i = ids.length - 1; i >= 0; i--) {
+    if (String(ids[i][0]) === String(repairId)) {
+      sheet.deleteRow(i + 2);
+      return { success: true, message: repairId + ' を削除しました' };
+    }
+  }
+  return { success: false, error: repairId + ' が見つかりません' };
 }
 
 // ===== スタッフ =====
