@@ -10660,12 +10660,13 @@ function updateOrderPrintPreview() {
   const rows = orders.map((o, i) => {
     const item = allItems.find(it => it.janCode === o.janCode);
     const name = (item ? item.productName : o.productName) || '-';
+    const spec = (item ? item.spec : o.spec) || '-';
     const price = Number(item ? item.unitPrice : o.unitPrice) || 0;
     const unit = (item ? item.orderUnit : o.orderUnit) || '';
     const qty = Number(o.quantity) || 0;
     const amount = price * qty;
     total += amount;
-    return `<tr><td style="text-align:center">${i+1}</td><td>${name}</td><td style="text-align:right">¥${price.toLocaleString()}</td><td style="text-align:center">${qty}</td><td style="text-align:center">${unit}</td><td style="text-align:right">¥${amount.toLocaleString()}</td><td>${o.remarks || ''}</td></tr>`;
+    return `<tr><td style="text-align:center">${i+1}</td><td style="font-size:12px">${name}</td><td style="font-size:12px;max-width:80px;overflow:hidden;text-overflow:ellipsis">${spec}</td><td style="text-align:right">¥${price.toLocaleString()}</td><td style="text-align:center">${qty}</td><td style="text-align:center">${unit}</td><td style="text-align:right">¥${amount.toLocaleString()}</td><td>${o.remarks || ''}</td></tr>`;
   }).join('');
   previewEl.innerHTML = `
     <div style="text-align:center;margin-bottom:16px"><h2 style="letter-spacing:8px;font-size:22px">発　注　書</h2></div>
@@ -10675,7 +10676,8 @@ function updateOrderPrintPreview() {
     <table style="width:100%;border-collapse:collapse;font-size:13px">
       <thead><tr style="background:var(--gray-100)">
         <th style="border:1px solid var(--gray-300);padding:8px;width:40px">No.</th>
-        <th style="border:1px solid var(--gray-300);padding:8px">商品名</th>
+        <th style="border:1px solid var(--gray-300);padding:8px;width:80px">商品名</th>
+        <th style="border:1px solid var(--gray-300);padding:8px;width:80px">規格</th>
         <th style="border:1px solid var(--gray-300);padding:8px;width:80px">単価</th>
         <th style="border:1px solid var(--gray-300);padding:8px;width:60px">数量</th>
         <th style="border:1px solid var(--gray-300);padding:8px;width:60px">単位</th>
@@ -10684,7 +10686,7 @@ function updateOrderPrintPreview() {
       </tr></thead>
       <tbody>${rows}</tbody>
       <tfoot><tr style="font-weight:700;background:var(--gray-50)">
-        <td colspan="5" style="border:1px solid var(--gray-300);padding:8px;text-align:right">合計</td>
+        <td colspan="6" style="border:1px solid var(--gray-300);padding:8px;text-align:right">合計</td>
         <td style="border:1px solid var(--gray-300);padding:8px;text-align:right">¥${total.toLocaleString()}</td>
         <td style="border:1px solid var(--gray-300);padding:8px"></td>
       </tr></tfoot>
@@ -10704,12 +10706,13 @@ function generateOrderPDF() {
   const rows = orders.map((o, i) => {
     const item = allItems.find(it => it.janCode === o.janCode);
     const name = (item ? item.productName : o.productName) || '-';
+    const spec = (item ? item.spec : o.spec) || '-';
     const price = Number(item ? item.unitPrice : o.unitPrice) || 0;
     const unit = (item ? item.orderUnit : o.orderUnit) || '';
     const qty = Number(o.quantity) || 0;
     const amount = price * qty;
     total += amount;
-    return `<tr><td style="text-align:center;border:1px solid #333;padding:6px 8px">${i+1}</td><td style="border:1px solid #333;padding:6px 8px">${name}</td><td style="text-align:right;border:1px solid #333;padding:6px 8px">¥${price.toLocaleString()}</td><td style="text-align:center;border:1px solid #333;padding:6px 8px">${qty}</td><td style="text-align:center;border:1px solid #333;padding:6px 8px">${unit}</td><td style="text-align:right;border:1px solid #333;padding:6px 8px">¥${amount.toLocaleString()}</td><td style="border:1px solid #333;padding:6px 8px">${o.remarks || ''}</td></tr>`;
+    return `<tr><td style="text-align:center;border:1px solid #333;padding:6px 8px">${i+1}</td><td style="border:1px solid #333;padding:6px 8px;font-size:12px;max-width:80px">${name}</td><td style="border:1px solid #333;padding:6px 8px;font-size:12px;max-width:80px">${spec}</td><td style="text-align:right;border:1px solid #333;padding:6px 8px">¥${price.toLocaleString()}</td><td style="text-align:center;border:1px solid #333;padding:6px 8px">${qty}</td><td style="text-align:center;border:1px solid #333;padding:6px 8px">${unit}</td><td style="text-align:right;border:1px solid #333;padding:6px 8px">¥${amount.toLocaleString()}</td><td style="border:1px solid #333;padding:6px 8px">${o.remarks || ''}</td></tr>`;
   }).join('');
 
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>発注書 - ${dateStr}</title>
@@ -10730,9 +10733,9 @@ th { background: #eee; border: 1px solid #333; padding: 8px; font-weight: 700; }
   <div>依頼部署: ME室</div>
 </div>
 <table>
-  <thead><tr><th style="width:40px">No.</th><th>商品名</th><th style="width:80px">単価</th><th style="width:60px">数量</th><th style="width:60px">単位</th><th style="width:90px">金額</th><th>備考</th></tr></thead>
+  <thead><tr><th style="width:40px">No.</th><th style="width:80px">商品名</th><th style="width:80px">規格</th><th style="width:80px">単価</th><th style="width:60px">数量</th><th style="width:60px">単位</th><th style="width:90px">金額</th><th>備考</th></tr></thead>
   <tbody>${rows}</tbody>
-  <tfoot><tr class="total-row"><td colspan="5" style="text-align:right">合計</td><td style="text-align:right">¥${total.toLocaleString()}</td><td></td></tr></tfoot>
+  <tfoot><tr class="total-row"><td colspan="6" style="text-align:right">合計</td><td style="text-align:right">¥${total.toLocaleString()}</td><td></td></tr></tfoot>
 </table>
 <script>window.onload=function(){window.print();}<\/script>
 </body></html>`;
