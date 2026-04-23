@@ -10648,12 +10648,13 @@ function updateOrderPrintPreview() {
     previewEl.innerHTML = '<p style="color:var(--gray-400);text-align:center;margin-top:60px">日付を選択すると発注書のプレビューが表示されます</p>';
     return;
   }
-  const orders = allOrders.filter(o => o.date === targetDate && o.status === '未発注');
+  const dateParts = targetDate.split('-');
+  const normalizedDate = `${dateParts[0]}/${parseInt(dateParts[1])}/${parseInt(dateParts[2])}`;
+  const orders = allOrders.filter(o => o.date === normalizedDate && o.status === '未発注');
   if (!orders.length) {
     previewEl.innerHTML = '<p style="color:var(--gray-400);text-align:center;margin-top:60px">該当日の未発注データがありません</p>';
     return;
   }
-  const dateParts = targetDate.split('-');
   const dateStr = `${dateParts[0]}年${parseInt(dateParts[1])}月${parseInt(dateParts[2])}日`;
   let total = 0;
   const rows = orders.map((o, i) => {
@@ -10693,10 +10694,11 @@ function updateOrderPrintPreview() {
 function generateOrderPDF() {
   const targetDate = document.getElementById('orderPrintDate').value;
   if (!targetDate) { showToast('日付を選択してください', 'error'); return; }
-  const orders = allOrders.filter(o => o.date === targetDate && o.status === '未発注');
+  const dateParts = targetDate.split('-');
+  const normalizedDate = `${dateParts[0]}/${parseInt(dateParts[1])}/${parseInt(dateParts[2])}`;
+  const orders = allOrders.filter(o => o.date === normalizedDate && o.status === '未発注');
   if (!orders.length) { showToast('該当日の未発注データがありません', 'error'); return; }
 
-  const dateParts = targetDate.split('-');
   const dateStr = `${dateParts[0]}年${parseInt(dateParts[1])}月${parseInt(dateParts[2])}日`;
   let total = 0;
   const rows = orders.map((o, i) => {
