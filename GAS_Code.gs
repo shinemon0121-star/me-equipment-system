@@ -164,6 +164,26 @@ function doGet(e) {
     .setMimeType(ContentService.MimeType.JSON);
 }
 
+// ===== GET リクエスト（CORS対応） =====
+function doGet(e) {
+  const action = e.parameter.action || '';
+  let result;
+  try {
+    if (action === 'migrateLendingData') {
+      result = migrateLendingData();
+    } else {
+      result = { success: false, error: 'Unknown action: ' + action };
+    }
+  } catch (error) {
+    result = { success: false, error: error.toString() };
+  }
+  return ContentService.createTextOutput(JSON.stringify(result))
+    .setMimeType(ContentService.MimeType.JSON)
+    .addHeader('Access-Control-Allow-Origin', '*')
+    .addHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+    .addHeader('Access-Control-Allow-Headers', 'Content-Type');
+}
+
 // ===== POST リクエスト =====
 function doPost(e) {
   Logger.log('🔵 doPost called!');

@@ -10788,20 +10788,31 @@ async function executeLendingDataMigration() {
   const confirmed = confirm('貸出履歴シートのデータを正しい形式に修正します。\n\n実行してもよろしいですか？\n\n※この操作はGoogle Sheets上のデータを修正します。');
   if (!confirmed) return;
 
+  if (!GAS_URL) {
+    showToast('GAS URLが設定されていません。設定画面で設定してください。', 'error');
+    return;
+  }
+
   try {
     showToast('マイグレーション中...', 'info');
-    const result = await gasPost('migrateLendingData', {});
+    const url = GAS_URL + '?action=migrateLendingData&t=' + Date.now();
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    const result = await response.json();
+
     if (result.success) {
       showToast(result.message, 'success');
       // 貸出履歴データを再度同期
-      await pullFromSheets();
+      setTimeout(() => pullFromSheets(), 1000);
       showToast('貸出履歴データを再度同期しました', 'success');
     } else {
       showToast('エラー: ' + result.error, 'error');
     }
   } catch (e) {
     showToast('マイグレーション実行エラー: ' + e.message, 'error');
-    console.error(e);
+    console.error('Migration error:', e);
   }
 }
 
