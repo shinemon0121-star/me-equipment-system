@@ -192,6 +192,7 @@ function doPost(e) {
       case 'deleteArea': result = handleDeleteArea(body.id); break;
       case 'saveItem': result = handleSaveItem(body.data); break;
       case 'deleteItem': result = handleDeleteItem(body.id); break;
+      case 'migrateLendingData': result = migrateLendingData(); break;
       case 'saveOrder': result = handleSaveOrder(body.data); break;
       case 'deleteOrder': result = handleDeleteOrder(body.id); break;
       case 'addInventoryLog': result = handleAddInventoryLog(body.data); break;
@@ -389,6 +390,74 @@ function handleAddLending(data) {
   ];
   sheet.appendRow(row);
   return { success: true };
+}
+
+// ===== 貸出履歴 マイグレーション =====
+function migrateLendingData() {
+  const ss = getSpreadsheet();
+  const sheet = ss.getSheetByName(SHEET_NAMES.lending);
+  if (!sheet) return { success: false, error: '貸出履歴シートが見つかりません' };
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return { success: true, message: 'マイグレーション対象データがありません' };
+
+  // 全データを取得
+  const allData = sheet.getRange(1, 1, lastRow, sheet.getLastColumn()).getValues();
+  const headers = allData[0];
+  const dataRows = allData.slice(1);
+
+  // 正しいヘッダーを設定
+  const correctHeaders = ['日時','機器ID','機器名','操作','貸出先','返却元','操作者'];
+
+  // シートをクリア
+  sheet.clearContents();
+
+  // 新しいヘッダーを入力
+  sheet.getRange(1, 1, 1, correctHeaders.length).setValues([correctHeaders]);
+
+  // データを正しい順序で入力（現在のデータ構造から推測：[時間,機器ID,機器名,操作,貸出先,返却元,操作者]）
+  // ユーザーの説明から、現在のシートはA=時間,B=機器ID,C=機器名,D=操作,E=貸出先,F=返却元,G=操作者と推測
+  let migratedCount = 0;
+  for (let i = 0; i < dataRows.length; i++) {
+    const row = dataRows[i];
+    if (!row[0] && !row[1] && !row[2]) continue; // 空行スキップ
+
+    // A列（時間）が入っている場合、これを日時に変換
+    // B列（機器ID）, C列（機器名）, D列（操作）がシフトしている場合を考慮
+    let newRow = [];
+
+    // 現在のデータ位置から正しい位置へ割り当て
+    // パターン1：[時間, 機器ID, 機器名, 操作, 貸出先, 返却元, 操作者]（既に正しい）
+    if (isValidDateTime(row[0]) || row[0] === '') {
+      newRow = [
+        row[0] || '', // 日時
+        row[1] || '', // 機器ID
+        row[2] || '', // 機器名
+        row[3] || '', // 操作
+        row[4] || '', // 貸出先
+        row[5] || '', // 返却元
+        row[6] || ''  // 操作者
+      ];
+    } else {
+      // パターン2：列がシフトしている場合、スキップして警告を返す
+      continue;
+    }
+
+    if (newRow[1]) { // 機器IDが存在する場合のみ追加
+      sheet.appendRow(newRow);
+      migratedCount++;
+    }
+  }
+
+  return { success: true, message: `${migratedCount}件のデータをマイグレーションしました` };
+}
+
+function isValidDateTime(val) {
+  if (!val) return true; // 空でもOK
+  const str = String(val).trim();
+  if (str === '') return true;
+  // 日時形式らしきもの（YYYY/MM/DD または YYYY-MM-DD など）を簡易判定
+  return /\d{4}[-/]\d{1,2}[-/]\d{1,2}/.test(str) || /\d{1,2}:\d{1,2}/.test(str);
 }
 
 // ===== 点検記録 =====

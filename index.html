@@ -10783,6 +10783,28 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
+// ===================== 貸出履歴 マイグレーション =====================
+async function executeLendingDataMigration() {
+  const confirmed = confirm('貸出履歴シートのデータを正しい形式に修正します。\n\n実行してもよろしいですか？\n\n※この操作はGoogle Sheets上のデータを修正します。');
+  if (!confirmed) return;
+
+  try {
+    showToast('マイグレーション中...', 'info');
+    const result = await gasPost('migrateLendingData', {});
+    if (result.success) {
+      showToast(result.message, 'success');
+      // 貸出履歴データを再度同期
+      await pullFromSheets();
+      showToast('貸出履歴データを再度同期しました', 'success');
+    } else {
+      showToast('エラー: ' + result.error, 'error');
+    }
+  } catch (e) {
+    showToast('マイグレーション実行エラー: ' + e.message, 'error');
+    console.error(e);
+  }
+}
+
 // ===================== START =====================
 document.addEventListener('DOMContentLoaded', initApp);
 </script>
