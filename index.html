@@ -7851,9 +7851,9 @@ function calcLendingHoursInMonth(lendStart, lendEnd, monthStart, monthEnd) {
 
 // ── 履歴から貸出/返却ペアを構築 ──
 function buildLendingPairs(historyRecords, equipmentId) {
-  // 該当機器のログを時系列でソート
+  // 該当機器のログを時系列でソート（大文字小文字を区別しない比較）
   const logs = historyRecords
-    .filter(h => h.equipmentId === equipmentId)
+    .filter(h => (h.equipmentId || '').toUpperCase() === equipmentId.toUpperCase())
     .sort((a, b) => (a.timestamp || '').localeCompare(b.timestamp || ''));
 
   const pairs = [];

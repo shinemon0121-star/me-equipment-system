@@ -359,6 +359,7 @@ function handleUpdateEquipmentField(id, field, value) {
 }
 
 // ===== 貸出履歴 =====
+const LENDING_FIELD_MAP = {'日時':'timestamp','機器ID':'equipmentId','機器名':'equipmentName','操作':'type','貸出先':'borrower','返却元':'returner','操作者':'operator'};
 function handleGetLending() {
   const sheet = getOrCreateSheet(SHEET_NAMES.lending);
   if (sheet.getLastRow() < 1) {
@@ -367,7 +368,11 @@ function handleGetLending() {
     return { success: true, data: [] };
   }
   const result = getSheetData(SHEET_NAMES.lending);
-  return { success: true, data: result.rows };
+  return {success:true, data: result.rows.map(row => {
+    const obj = {};
+    for (const [k,v] of Object.entries(row)) { obj[LENDING_FIELD_MAP[k]||k] = v; }
+    return obj;
+  })};
 }
 
 function handleAddLending(data) {
