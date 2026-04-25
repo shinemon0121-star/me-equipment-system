@@ -294,9 +294,6 @@ a{color:var(--primary);text-decoration:none}
     <div class="nav-item" data-screen="inspection" onclick="showScreen('inspection')">
       <span class="icon">&#9989;</span>点検登録
     </div>
-    <div class="nav-item" data-screen="eg-inspection" onclick="showScreen('eg-inspection')">
-      <span class="icon">⚡</span>電気メス点検
-    </div>
     <div class="nav-item" data-screen="inspection-schedule" onclick="showScreen('inspection-schedule')">
       <span class="icon">&#128197;</span>年間点検予定表
     </div>
@@ -575,96 +572,6 @@ a{color:var(--primary);text-decoration:none}
       <div id="inspSchedLoadCheck" style="margin-bottom:16px"></div>
       <!-- スケジュール表本体 -->
       <div id="inspSchedTable" style="overflow-x:auto"></div>
-    </div>
-
-    <!-- ========== 電気メス点検画面 ========== -->
-    <div class="screen" id="screen-eg-inspection">
-      <h2 style="margin-bottom:20px">電気メス点検登録</h2>
-      <div class="card" style="max-width:700px">
-        <div class="card-body">
-          <form id="egInspectionForm">
-            <!-- 点検日 -->
-            <div class="form-group">
-              <label>点検日</label>
-              <input type="date" id="egInspDate" class="form-input" required>
-            </div>
-
-            <!-- 点検区分 -->
-            <div class="form-group">
-              <label>点検区分</label>
-              <select id="egInspType" class="form-input" required>
-                <option value="">選択してください</option>
-                <option value="日常点検">日常点検</option>
-                <option value="定期点検（4カ月）">定期点検（4カ月）</option>
-              </select>
-            </div>
-
-            <!-- 機器ID -->
-            <div class="form-group">
-              <label>機器ID</label>
-              <input type="text" id="egInspEquipmentId" class="form-input" placeholder="例：EG-CM001" required>
-              <small style="color:var(--gray-500);margin-top:4px;display:block">※EGで始まる機器IDを入力してください</small>
-            </div>
-
-            <!-- 点検内容 -->
-            <div class="form-group">
-              <label>点検内容（チェック）</label>
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px">
-                <label style="display:flex;align-items:center;cursor:pointer;font-weight:normal">
-                  <input type="checkbox" name="egInspContent" value="本体キズ・破損" class="form-check">
-                  <span style="margin-left:8px">本体キズ・破損</span>
-                </label>
-                <label style="display:flex;align-items:center;cursor:pointer;font-weight:normal">
-                  <input type="checkbox" name="egInspContent" value="電源コンセントの破損・断線" class="form-check">
-                  <span style="margin-left:8px">電源コンセント破損・断線</span>
-                </label>
-                <label style="display:flex;align-items:center;cursor:pointer;font-weight:normal">
-                  <input type="checkbox" name="egInspContent" value="各接続口・フットスイッチ" class="form-check">
-                  <span style="margin-left:8px">各接続口・フットスイッチ</span>
-                </label>
-                <label style="display:flex;align-items:center;cursor:pointer;font-weight:normal">
-                  <input type="checkbox" name="egInspContent" value="パネル動作確認" class="form-check">
-                  <span style="margin-left:8px">パネル動作確認</span>
-                </label>
-                <label style="display:flex;align-items:center;cursor:pointer;font-weight:normal">
-                  <input type="checkbox" name="egInspContent" value="フットスイッチ動作確認" class="form-check">
-                  <span style="margin-left:8px">フットスイッチ動作確認</span>
-                </label>
-                <label style="display:flex;align-items:center;cursor:pointer;font-weight:normal">
-                  <input type="checkbox" name="egInspContent" value="音量調節" class="form-check">
-                  <span style="margin-left:8px">音量調節</span>
-                </label>
-                <label style="display:flex;align-items:center;cursor:pointer;font-weight:normal">
-                  <input type="checkbox" name="egInspContent" value="対極板コード断線モニタ・アラーム確認" class="form-check">
-                  <span style="margin-left:8px">対極板コード断線モニタ・アラーム確認</span>
-                </label>
-                <label style="display:flex;align-items:center;cursor:pointer;font-weight:normal">
-                  <input type="checkbox" name="egInspContent" value="イリゲーション連動動作" class="form-check">
-                  <span style="margin-left:8px">イリゲーション連動動作</span>
-                </label>
-              </div>
-            </div>
-
-            <!-- コメント -->
-            <div class="form-group">
-              <label>コメント</label>
-              <textarea id="egInspComment" class="form-input" rows="4" placeholder="その他の備考があればここに入力してください"></textarea>
-            </div>
-
-            <!-- 登録者 -->
-            <div class="form-group">
-              <label>登録者</label>
-              <input type="text" id="egInspStaff" class="form-input" required>
-            </div>
-
-            <!-- 登録ボタン -->
-            <div style="display:flex;gap:8px;margin-top:20px">
-              <button type="submit" class="btn btn-primary" onclick="submitEGInspection(event)">登録</button>
-              <button type="button" class="btn btn-outline" onclick="clearEGInspectionForm()">クリア</button>
-            </div>
-          </form>
-        </div>
-      </div>
     </div>
 
     <!-- ========== 修理記録画面 ========== -->
@@ -3787,11 +3694,6 @@ async function initApp() {
   // Populate staff dropdown for inspection
   await populateStaffDropdown();
 
-  // 電気メス点検フォーム初期化
-  const today = new Date().toISOString().split('T')[0];
-  const egDateEl = document.getElementById('egInspDate');
-  if (egDateEl) egDateEl.value = today;
-
   // Focus barcode input
   barcodeInput.focus();
 
@@ -3829,7 +3731,7 @@ function showScreen(name) {
 
   const titles = {
     lending: '貸出・返却', status: '貸出状況', equipment: '機器一覧（使用可能機器）',
-    inspection: '点検登録', 'eg-inspection': '電気メス点検', 'inspection-schedule': '年間点検予定表', 'durability-overdue': '耐久超過リスト', repair: '修理記録', 'quick-repair': '修理依頼(簡易)',
+    inspection: '点検登録', 'inspection-schedule': '年間点検予定表', 'durability-overdue': '耐久超過リスト', repair: '修理記録', 'quick-repair': '修理依頼(簡易)',
     'repair-dashboard': '修理分析', history: '貸出履歴', dashboard: 'ダッシュボード',
     utilization: '稼働率分析', lifecycle: 'ライフサイクル・アドバイザー',
     'master-equipment': '機器マスター管理', 'master-staff': 'スタッフ管理',
@@ -10864,33 +10766,6 @@ async function pushOrderToSheets(orderData) {
   if (!syncEnabled) return;
   try { await gasPost('saveOrder', { data: orderData }); }
   catch(e) { queueSync('saveOrder', { data: orderData }); }
-}
-
-// ===================== 電気メス点検 =====================
-function submitEGInspection(e) {
-  e.preventDefault();
-  const equipmentId = document.getElementById('egInspEquipmentId').value.trim();
-  if (!equipmentId.toUpperCase().includes('EG')) {
-    showToast('機器IDにEGを含む必要があります', 'error');
-    return;
-  }
-  const inspDate = document.getElementById('egInspDate').value;
-  const inspType = document.getElementById('egInspType').value;
-  const checkedItems = [...document.querySelectorAll('input[name="egInspContent"]:checked')].map(cb => cb.value);
-  const comment = document.getElementById('egInspComment').value;
-  const staff = document.getElementById('egInspStaff').value.trim();
-  if (!staff) { showToast('登録者を入力してください', 'error'); return; }
-  const data = { 機器ID: equipmentId, 点検日: inspDate, 点検区分: inspType, 内容: checkedItems.join('、'), コメント: comment, 登録者: staff };
-  gasPost('addTypedInspection', { sheetName: '電気メス点検', data }).then(res => {
-    if (res.success) { showToast('点検記録を登録しました', 'success'); clearEGInspectionForm(); }
-    else { showToast('登録に失敗しました', 'error'); }
-  }).catch(e => { showToast('エラーが発生しました', 'error'); console.error(e); });
-}
-
-function clearEGInspectionForm() {
-  document.getElementById('egInspectionForm').reset();
-  const today = new Date().toISOString().split('T')[0];
-  document.getElementById('egInspDate').value = today;
 }
 
 // ===================== KEYBOARD SHORTCUTS =====================
