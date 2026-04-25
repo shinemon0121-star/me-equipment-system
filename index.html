@@ -5445,6 +5445,22 @@ const INSPECTION_TYPES = {
       {key:'comment',label:'備考',type:'text'}
     ]
   },
+  electrosurgical: {
+    name: '電気メス', icon: '⚡', idPatterns: ['EG'],
+    sheetName: '電気メス点検', gid: 0, idField: '機器ID', inspectorField: '点検者',
+    categories: ['日常点検','定期点検（4カ月）'],
+    fields: [
+      {key:'bodyDamage',label:'本体キズ・破損',type:'check'},
+      {key:'powerDamage',label:'電源コンセントの破損・断線',type:'check'},
+      {key:'connector',label:'各接続口・フットスイッチ',type:'check'},
+      {key:'panelOp',label:'パネル動作確認',type:'check'},
+      {key:'footSwitchOp',label:'フットスイッチ動作確認',type:'check'},
+      {key:'volumeControl',label:'音量調節',type:'check'},
+      {key:'monitorAlarm',label:'対極板コード断線モニタ・アラーム確認',type:'check'},
+      {key:'irrigationOp',label:'イリゲーション連動動作',type:'check'},
+      {key:'comment',label:'コメント',type:'text'}
+    ]
+  },
   ecmo: {
     name: 'ECMO/PCPS', icon: '\uD83E\uDEC0', idPatterns: ['CE-EM','DE-EM'],
     sheetName: 'ECMO_PCPS点検', gid: 1141402612, idField: '機器ID', inspectorField: '点検者',
